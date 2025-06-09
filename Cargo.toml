@@ -1,0 +1,9 @@
+[package]
+name = "nux-audio"
+authors = ["Sébastien LUNDI"]
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"  # snafu or thiserror instead?
+rusb = "0.9.4"
