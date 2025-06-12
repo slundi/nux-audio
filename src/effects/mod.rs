@@ -154,7 +154,7 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>> {
             i += 1; // Move to the next index
         } else {
             // Process byte pair (like 2nd and 3rd, 5th and 6th, etc.)
-            let combined = u16::from_be_bytes([sliced[i], sliced[i+1]]) / 2;
+            let combined = u16::from_be_bytes([sliced[i], sliced[i + 1]]) / 2;
             match EffectCategory::from_u8(combined as u8) {
                 Some(ec) => effects.push(ec),
                 None => return Err(anyhow!("Cannot get effect category with {}", combined)), // Unknown

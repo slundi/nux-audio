@@ -44,7 +44,7 @@ static WAHS: LazyLock<HashMap<&str, EffectOption>> = LazyLock::new(|| {
                         range_start: Some(0),
                         range_end: Some(100),
                         ctrl: 12,
-                        current_value: None
+                        current_value: None,
                     },
                     Knob {
                         id: "range",
@@ -52,7 +52,7 @@ static WAHS: LazyLock<HashMap<&str, EffectOption>> = LazyLock::new(|| {
                         range_start: Some(0),
                         range_end: Some(5),
                         ctrl: 13,
-                        current_value: None
+                        current_value: None,
                     },
                 ],
                 ..Default::default()
