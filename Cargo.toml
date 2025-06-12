@@ -6,4 +6,4 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"  # snafu or thiserror instead?
-rusb = "0.9.4"
+midir = "0.10"

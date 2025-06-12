@@ -18,6 +18,8 @@ pkgs.mkShell {
     # cargo-deb # build deb
     # cargo-deps # dependency graph
     rustfmt
+
+    alsa-lib
   ];
 
   packages = with pkgs; [
