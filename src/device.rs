@@ -15,12 +15,14 @@ pub struct ControllerState<'a> {
     pub is_fetching_preset: bool,
 }
 
+/// Extract version from message. SysEx bytes must have been removed.
 pub fn extract_version(response: &[u8]) -> Result<String> {
     if response.len() < 6 {
         return Err(anyhow!("Unexpected SysEx response length: {:?}", response));
     }
     let version_bytes = &response[4..response.len() - 1];
-    let version = String::from_utf8(version_bytes.to_vec())?.replace("\0", "");
+    let version = String::from_utf8(version_bytes.to_vec())?;
+    let version = version.trim_end_matches('\0');
     let version = version.trim().to_string();
 
     if let Some(value) = version.split_once("MG-30") {
@@ -29,11 +31,18 @@ pub fn extract_version(response: &[u8]) -> Result<String> {
     Err(anyhow!("Cannot get version from value {version}"))
 }
 
-// function extractDeviceVersion(response: Uint8Array): Nux.DeviceVersion {
-//   if (response.length < 6) {
-//     console.warn("⚠️ Unexpected SysEx response length:", response);
-//     return { version: "Unknown" };
-//   }
+pub fn version_to_tuple(version: &str) -> Result<(u8, u8, u8)> {
+    if version.chars().filter(|&c| c == '.').count() != 2 {
+        return Err(anyhow!("Invalid version format: expected X.Y.Z, got '{}'", version));
+    }
+
+    let mut parts = version.split('.');
+    let major = parts.next().ok_or_else(|| anyhow!("Missing major version"))?.parse::<u8>()?;
+    let minor = parts.next().ok_or_else(|| anyhow!("Missing minor version"))?.parse::<u8>()?;
+    let patch = parts.next().ok_or_else(|| anyhow!("Missing patch version"))?.parse::<u8>()?;
+
+    Ok((major, minor, patch))
+}
 
 //   const versionBytes = response.slice(4, response.length - 1); // Avoid reading out of bounds
 //   let version = String.fromCharCode(...versionBytes).trim();
@@ -44,3 +53,18 @@ pub fn extract_version(response: &[u8]) -> Result<String> {
 //   console.log(`🎸 Device version: ${version}`);
 //   return { version: version || "Unknown" };
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_version() {
+        assert_eq!(version_to_tuple("0.0.0").unwrap(),(0, 0, 0));
+        assert!(version_to_tuple("0.00").is_err());
+        assert!(version_to_tuple("0.a.0").is_err());
+        assert!(version_to_tuple("0.0.f0").is_err());
+        assert!(version_to_tuple("192.168.1.1").is_err());
+    }
+}
+
