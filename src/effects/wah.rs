@@ -1,3 +1,10 @@
+// WAH		                    5 WAY ENCODER (ROTATE to CHANGE)	5 WAY ENCODER (TAP SW)	KNOB1	KNOB2
+// CLYDE (60's TRUMPET SOUND)	CLYDE	        ON / BYPASS		
+// CRY BABY	                    CRY BB	        ON / BYPASS		
+// VOX V847                     WAH	V847	    ON / BYPASS		
+// MORLEY BAD HORSIE WAH	    HORSE WAH	    ON / BYPASS	    CONTOUR	RANGE
+// DIGITECH WHAMMY	            OCTAVE SHIFT	ON / BYPASS	    UP/DOWN	
+
 use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, Knob};

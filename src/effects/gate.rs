@@ -1,1 +1,2 @@
-
+// GATE		    5 WAY ENCODER (ROTATE to CHANGE)	5 WAY ENCODER (TAP SW)	KNOB1 	    KNOB2 
+// NOISE GATE	NOISE GATE	                        ON / BYPASS	            SENSITIVITY	DECAY
