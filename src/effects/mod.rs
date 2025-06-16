@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 pub mod amp;
 pub mod compression;
 pub mod delay;
+mod drums;
 pub mod efx;
 pub mod equalizer;
 pub mod gate;
