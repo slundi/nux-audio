@@ -31,30 +31,7 @@ pub fn extract_version(response: &[u8]) -> Result<String> {
     Err(anyhow!("Cannot get version from value {version}"))
 }
 
-pub fn version_to_tuple(version: &str) -> Result<(u8, u8, u8)> {
-    if version.chars().filter(|&c| c == '.').count() != 2 {
-        return Err(anyhow!("Invalid version format: expected X.Y.Z, got '{}'", version));
-    }
-
-    let mut parts = version.split('.');
-    let major = parts.next().ok_or_else(|| anyhow!("Missing major version"))?.parse::<u8>()?;
-    let minor = parts.next().ok_or_else(|| anyhow!("Missing minor version"))?.parse::<u8>()?;
-    let patch = parts.next().ok_or_else(|| anyhow!("Missing patch version"))?.parse::<u8>()?;
-
-    Ok((major, minor, patch))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn test_version() {
-        assert_eq!(version_to_tuple("0.0.0").unwrap(),(0, 0, 0));
-        assert!(version_to_tuple("0.00").is_err());
-        assert!(version_to_tuple("0.a.0").is_err());
-        assert!(version_to_tuple("0.0.f0").is_err());
-        assert!(version_to_tuple("192.168.1.1").is_err());
-    }
 }
 

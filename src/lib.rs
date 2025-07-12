@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+
 const SYSEX_START: u8 = 0xF0;
 const SYSEX_END: u8 = 0xF7;
 
@@ -31,9 +33,9 @@ impl SysExMessage {
     ///
     /// # Arguments
     /// * `manufacturer_id` - A vector of bytes representing the manufacturer ID.
-    ///                       Must be 1 or 3 bytes long.
+    ///   Must be 1 or 3 bytes long.
     /// * `data_bytes` - A vector of bytes representing the specific data.
-    ///                  All bytes must have the MSB set to 0 (value < 0x80).
+    ///   All bytes must have the MSB set to 0 (value < 0x80).
     pub fn new(manufacturer_id: Vec<u8>, data_bytes: Vec<u8>) -> Result<Self, SysExError> {
         if manufacturer_id.is_empty() || (manufacturer_id.len() != 1 && manufacturer_id.len() != 3)
         {
@@ -135,6 +137,47 @@ impl SysExMessage {
             data_bytes,
         })
     }
+}
+
+#[derive(Debug)]
+pub enum VersionError {
+    /// 2 dots are requires
+    InvalidFormat,
+    MissingMajorVersion,
+    MissingMinorVersion,
+    MissingPatchVersion,
+    InvalidMajorVersion(ParseIntError),
+    InvalidMinorVersion(ParseIntError),
+    InvalidPatchVersion(ParseIntError),
+}
+
+pub fn semver_to_tuple(version: &str) -> Result<(u8, u8, u8), VersionError> {
+    if version.chars().filter(|&c| c == '.').count() != 2 {
+        return Err(VersionError::InvalidFormat);
+    }
+
+    let mut parts = version.split('.');
+    let major = parts
+        .next()
+        .ok_or(VersionError::MissingMajorVersion)?
+        .parse::<u8>()
+        .map_err(VersionError::InvalidMajorVersion)?;
+    let minor = parts
+        .next()
+        .ok_or(VersionError::MissingMinorVersion)?
+        .parse::<u8>()
+        .map_err(VersionError::InvalidMinorVersion)?;
+    let patch = parts
+        .next()
+        .ok_or(VersionError::MissingPatchVersion)?
+        .parse::<u8>()
+        .map_err(VersionError::InvalidPatchVersion)?;
+
+    Ok((major, minor, patch))
+}
+
+pub trait MidiMessage {
+    fn send(message: &[u8]);
 }
 
 // --- Unit Tests ---
@@ -263,5 +306,14 @@ mod tests {
     fn test_new_data_bytes_contains_status_byte() {
         let result = SysExMessage::new(vec![0x41], vec![0x01, 0x90]);
         assert_eq!(result, Err(SysExError::ContainsStatusByte));
+    }
+
+    #[test]
+    fn test_version() {
+        assert_eq!(semver_to_tuple("0.0.0").unwrap(), (0, 0, 0));
+        assert!(semver_to_tuple("0.00").is_err());
+        assert!(semver_to_tuple("0.a.0").is_err());
+        assert!(semver_to_tuple("0.0.f0").is_err());
+        assert!(semver_to_tuple("192.168.1.1").is_err());
     }
 }
