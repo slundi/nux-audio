@@ -1,3 +1,5 @@
+use simple_logger::SimpleLogger;
+
 pub mod device;
 pub mod effects;
 pub mod midi;
@@ -9,6 +11,7 @@ pub mod utils;
 // type KnobEntry = [string, string, [number, number]?];
 
 fn main() {
+    SimpleLogger::new().init().expect("Cannot initialize logger");
     // crate::midi::print_inputs();
     // crate::midi::print_outputs();
 
