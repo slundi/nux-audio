@@ -17,5 +17,5 @@ fn main() {
 
     // NUX NMP-03:NUX NMP-03 MIDI 1 28:0
 
-    crate::midi::midir_test();
+    crate::device::Device::detect();
 }
