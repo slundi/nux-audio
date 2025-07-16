@@ -8,6 +8,13 @@ edition = "2021"
 anyhow = "1.0" # snafu or thiserror instead?
 midir = "0.10"
 log = "0.4"
-fern = "0.7"
+fern = "0.7"  # flexi_logger = "0.31" ?
 humantime = "2.2"
 xdg = "3.0"
+
+# textwrap = "0.16"
+# crossterm = "0.29"
+
+# [dev-dependencies]
+# rstest = "0.25"
+# test-case = "3.3"

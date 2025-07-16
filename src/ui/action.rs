@@ -1,0 +1,52 @@
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum GlobalAction {
+    Quit,
+    ChangeDevice,
+    RefreshDeviceList,
+    Help,
+
+    // preset actions
+    SendPreset,
+    GetPreset,
+    GetCurrentPreset,
+    /// Get all preset from the device
+    FetchPreset,
+    NewPreset,
+    EditPreset,
+    RenamePreset,
+    DeletePreset,
+
+    Select,
+    Unselect,
+    ToggleSelect,
+    SortBy,
+
+    // effect control
+    EnableGate,
+    DisableGate,
+    ToggleGate,
+    EnableComp,
+    DisableComp,
+    ToggleComp,
+    EnableEfx,
+    DisableEfx,
+    ToggleEfx,
+    EnableAmp,
+    DisableAmp,
+    ToggleAmp,
+    EnableCab,
+    DisableCab,
+    ToggleCab,
+    EnableReverb,
+    DisableReverb,
+    ToggleReverb,
+    EnableDelay,
+    DisableDelay,
+    ToggleDelay,
+    EnableModulation,
+    DisableModulation,
+    ToggleModulation,
+    EnableEq,
+    DisableEq,
+    ToggleEq,
+}
