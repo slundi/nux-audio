@@ -5,7 +5,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"  # snafu or thiserror instead?
+anyhow = "1.0" # snafu or thiserror instead?
 midir = "0.10"
 log = "0.4"
-simple_logger = "5.0"
+fern = "0.7"
+humantime = "2.2"
+xdg = "3.0"
