@@ -1,5 +1,6 @@
 use log::{self, error};
 
+pub mod cli;
 pub mod device;
 pub mod effects;
 pub mod midi;
