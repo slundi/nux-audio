@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use nux_audio::MidiManager;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -17,6 +18,52 @@ pub struct Cli {
 
     #[command(subcommand)]
     pub command: Commands,
+}
+
+impl Cli {
+    pub fn process(self) {
+        match self.command {
+            Commands::Devices => {
+                println!("Listing available devices...");
+                match MidiManager::new() {
+                    Ok(manager) => {
+                        let ports = manager.list_ports();
+                        println!("{} MIDI ports found", ports.len());
+                        // TODO: filter NUX devices from name
+                        for (port, name) in ports {
+                            println!("* {port}\t{name}");
+                        }
+                    }
+                    Err(_) => eprintln!("Cannot list devices"),
+                }
+            }
+            Commands::Info => {
+                println!("Showing device info...");
+                // TODO: error if multiple device otherwise send SysEx
+            }
+            Commands::Preset { action } => match action {
+                PresetAction::Show => println!("Showing current preset..."),
+                PresetAction::Get(args) => {
+                    println!(
+                        "Getting preset from slot: {:?}, saving to: {:?}",
+                        args.slot, args.filename
+                    );
+                }
+                PresetAction::Send(args) => {
+                    println!(
+                        "Sending preset from: {:?} to slot: {:?}",
+                        args.filename, args.slot
+                    );
+                }
+            },
+            Commands::Effect { effect, parameters } => {
+                println!("Controlling effect: {}", effect);
+                for param in parameters {
+                    println!("  Setting parameter: {}", param);
+                }
+            }
+        };
+    }
 }
 
 #[derive(Subcommand)]
@@ -248,46 +295,5 @@ mod tests {
         let result = parse_effect_parameters("gain=invalid");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid value"));
-    }
-}
-
-// Example usage in main.rs
-#[cfg(feature = "example")]
-fn example_main() {
-    use clap::Parser;
-
-    let cli = Cli::parse();
-
-    println!("Device: {:?}", cli.device_name);
-    println!("MIDI Port: {:?}", cli.midi_port);
-
-    match cli.command {
-        Commands::Devices => {
-            println!("Listing available devices...");
-        }
-        Commands::Info => {
-            println!("Showing device info...");
-        }
-        Commands::Preset { action } => match action {
-            PresetAction::Show => println!("Showing current preset..."),
-            PresetAction::Get(args) => {
-                println!(
-                    "Getting preset from slot: {:?}, saving to: {:?}",
-                    args.slot, args.filename
-                );
-            }
-            PresetAction::Send(args) => {
-                println!(
-                    "Sending preset from: {:?} to slot: {:?}",
-                    args.filename, args.slot
-                );
-            }
-        },
-        Commands::Effect { effect, parameters } => {
-            println!("Controlling effect: {}", effect);
-            for param in parameters {
-                println!("  Setting parameter: {}", param);
-            }
-        }
     }
 }

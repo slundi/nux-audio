@@ -1,4 +1,4 @@
-use log::{self, error};
+use clap::Parser;
 
 pub mod cli;
 pub mod device;
@@ -12,6 +12,11 @@ pub mod utils;
 // type KnobEntry = [string, string, [number, number]?];
 
 fn main() {
+    if std::env::args().len() > 1 {
+        let cli = cli::Cli::parse();
+        cli.process();
+        return;
+    }
     let mut log_file = None;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("nux-audio");
     match xdg_dirs.place_state_file("app.log") {
@@ -50,6 +55,5 @@ fn main() {
     let devices = crate::device::Device::detect();
     if devices.is_empty() {
         log::warn!("No MIDI device found, exiting");
-        return;
     }
 }

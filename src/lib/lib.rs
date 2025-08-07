@@ -1,0 +1,173 @@
+// // Main NUX Audio Effects Library
+// use std::collections::HashMap;
+
+// pub mod devices;
+// pub mod effects;
+pub mod midi;
+// pub mod presets;
+
+// pub use devices::*;
+// pub use effects::*;
+pub use midi::*;
+// pub use presets::*;
+// use serde::{Deserialize, Serialize};
+
+// /// Main trait for all NUX audio effects
+// pub trait Effect: std::fmt::Debug + Clone{
+//     /// Get the effect type identifier
+//     fn effect_type(&self) -> EffectType;
+
+//     /// Get the effect name
+//     fn name(&self) -> &str;
+
+//     /// Get all available parameters for this effect
+//     fn parameters(&self) -> Vec<Parameter>;
+
+//     /// Set a parameter value
+//     fn set_parameter(&mut self, param: &str, value: u8) -> Result<(), EffectError>;
+
+//     /// Get a parameter value
+//     fn get_parameter(&self, param: &str) -> Option<u8>;
+
+//     /// Generate MIDI SysEx message for this effect
+//     fn to_sysex(&self, device_type: DeviceType) -> Result<Vec<u8>, EffectError>;
+
+//     /// Create effect from MIDI SysEx data
+//     fn from_sysex(data: &[u8], device_type: DeviceType) -> Result<Self, EffectError>
+//     where
+//         Self: Sized;
+// }
+
+// /// Trait for NUX devices that support effects
+// pub trait NuxDevice {
+//     /// Get device type
+//     fn device_type(&self) -> DeviceType;
+
+//     /// Get supported effects for this device
+//     fn supported_effects(&self) -> Vec<EffectType>;
+
+//     /// Get device-specific effect ID mapping
+//     fn effect_id(&self, effect_type: EffectType) -> Option<u8>;
+
+//     /// Get MIDI channel for this device
+//     fn midi_channel(&self) -> u8;
+
+//     /// Get device-specific SysEx header
+//     fn sysex_header(&self) -> Vec<u8>;
+// }
+
+// /// Effect parameter definition
+// #[derive(Debug, Clone, PartialEq)]
+// pub struct Parameter {
+//     pub name: String,
+//     pub min_value: u8,
+//     pub max_value: u8,
+//     pub default_value: u8,
+//     pub step: u8,
+//     pub unit: Option<String>,
+// }
+
+// /// Effect types supported by NUX devices
+// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+// pub enum EffectType {
+//     // Amp models
+//     AmpClean,
+//     AmpCrunch,
+//     AmpLead,
+//     AmpBass,
+//     AmpAcoustic,
+
+//     // Distortion/Overdrive
+//     Overdrive,
+//     Distortion,
+//     Fuzz,
+//     TubeScreamer,
+//     MetalZone,
+
+//     // Modulation
+//     Chorus,
+//     Flanger,
+//     Phaser,
+//     Tremolo,
+//     Vibrato,
+//     Rotary,
+
+//     // Time-based
+//     Delay,
+//     Echo,
+//     Reverb,
+
+//     // Filter
+//     Wah,
+//     AutoWah,
+//     Compressor,
+
+//     // Utility
+//     Tuner,
+//     NoiseGate,
+//     Boost,
+// }
+
+// /// NUX device types
+// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+// pub enum DeviceType {
+//     MightyPlug,
+//     MightyPlugPro,
+//     MightySpace,
+//     MightyAir,
+//     MightyLiteBt,
+//     Mighty8Bt,
+//     Mighty20Bt,
+//     Mighty40Bt,
+// }
+
+// /// Effect processing errors
+// #[derive(Debug, thiserror::Error)]
+// pub enum EffectError {
+//     #[error("Invalid parameter: {0}")]
+//     InvalidParameter(String),
+
+//     #[error("Parameter value out of range: {0}")]
+//     ValueOutOfRange(String),
+
+//     #[error("Unsupported effect type: {0:?}")]
+//     UnsupportedEffect(EffectType),
+
+//     #[error("Invalid MIDI data")]
+//     InvalidMidiData,
+
+//     #[error("Device not supported")]
+//     DeviceNotSupported,
+// }
+
+// /// Preset management
+// #[derive(Debug, Clone)]
+// pub struct Preset {
+//     pub name: String,
+//     pub effects: HashMap<EffectType, Box<dyn Effect>>,
+//     pub device_type: DeviceType,
+// }
+
+// impl Preset {
+//     pub fn new(name: String, device_type: DeviceType) -> Self {
+//         Self {
+//             name,
+//             effects: HashMap::new(),
+//             device_type,
+//         }
+//     }
+
+//     pub fn add_effect<E: Effect + 'static>(&mut self, effect: E) {
+//         self.effects.insert(effect.effect_type(), Box::new(effect));
+//     }
+
+//     pub fn to_sysex(&self) -> Result<Vec<u8>, EffectError> {
+//         let mut sysex_data = Vec::new();
+
+//         for effect in self.effects.values() {
+//             sysex_data.extend(effect.to_sysex(self.device_type)?);
+//         }
+
+//         Ok(sysex_data)
+//     }
+// }

@@ -5,16 +5,31 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0"                                             # snafu or thiserror instead?
 clap = { version = "4.5", features = ["derive", "cargo"] }
 midir = "0.10"
 log = "0.4"
-fern = "0.7"  # flexi_logger = "0.31" ?
+fern = "0.7"                                               # flexi_logger = "0.31" ?
 humantime = "2.2"
 xdg = "3.0"
 
 # textwrap = "0.16"
 # crossterm = "0.29"
 
-# [dev-dependencies]
+[dev-dependencies]
+tokio-test = "0.4" # For async testing
+criterion = "0.7"  # For benchmarking
 # rstest = "0.25"
 # test-case = "3.3"
+
+# [[bench]]
+# name = "effects_benchmark"
+# harness = false
+
+[lib]
+name = "nux_audio"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "nux-cli"
+path = "src/main.rs"
