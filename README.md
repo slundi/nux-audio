@@ -2,7 +2,7 @@
 
 Manage NUX audio devices.
 
-This is a tool to manage your Nux devices. I own a various Nux products:
+This is a tool to manage your Nux devices 🎸. I own a various Nux products:
 * [MG30](https://nuxaudio.com/product/mg30/)
 * [Amp Academy](https://nuxaudio.com/product/ampacademy/)
 * [MLD Bass Preamp + DI](https://nuxaudio.com/product/mldbasspreampdi/)
@@ -12,11 +12,21 @@ I'm a Linux user so I want to manage those devices in my current OS.
 
 I have based my work on 2 projects ([NuxOnline](https://github.com/Srijan619/nuxOnline) and [Mightier Amp](https://github.com/tuntorius/mightier_amp)).
 
+This project is in early stage, so don't expect to manage tour device yet. But, if you want to help me you are welcome 🙂
+
 ## Installation
 
-1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install) if you don't have it
+1. Install the [🦀 Rust toolchain](https://www.rust-lang.org/tools/install) if you don't have it
 2. clone this repository
 3. in the project folder, run `cargo build --release`, the binary file will be in `./target/release/nux-audio`
+
+## Usage
+
+```shell
+# Display CLI help
+nux-cli --help
+nux-cli -h
+```
 
 ## Roadmap
 
@@ -31,8 +41,7 @@ I have based my work on 2 projects ([NuxOnline](https://github.com/Srijan619/nux
 * [ ] Apply preset when applicable
 * [ ] Create all effects
 * [ ] Control effect
-* [ ] use a CSR (Controller Service Repository) architecture
-* [ ] async calls to MIDI stuffs
+* [ ] async calls to MIDI stuffs?
 
 There is reverse engineering to do so there are unknowns.
 
@@ -44,7 +53,7 @@ I also would like to convert preset between various devices.
 
 Various unknow features:
 * [ ] Use XDG for the configuration, presets, IRs, log file
-* [ ] Log on the console and/or a file (using [tracing](https://crates.io/crates/tracing))
+* [ ] Log on the console and/or a file
 * [ ] Convert presets for another device
 * [ ] MIDI CC mapping
 * [ ] drum & loop
