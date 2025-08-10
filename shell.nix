@@ -19,7 +19,13 @@ pkgs.mkShell {
     # cargo-deps # dependency graph
     rustfmt
 
+    pkg-config
     alsa-lib
+    dbus
+
+    # for the bluetooth
+    bluez
+    systemd
   ];
 
   packages = with pkgs; [

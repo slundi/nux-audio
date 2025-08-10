@@ -1,5 +1,7 @@
 use clap::Parser;
 
+#[cfg(feature = "bt")]
+pub mod bluetooth;
 pub mod cli;
 pub mod device;
 pub mod effects;
@@ -11,11 +13,12 @@ pub mod utils;
 // type SysExResponseData = DeviceVersion | Preset | Partial<Preset>;
 // type KnobEntry = [string, string, [number, number]?];
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().len() > 1 {
         let cli = cli::Cli::parse();
-        cli.process();
-        return;
+        cli.process().await;
+        return Ok(());
     }
     let mut log_file = None;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("nux-audio");
@@ -28,7 +31,7 @@ fn main() {
         }
         Err(e) => {
             eprintln!("Unable to create log file: {e}");
-            return;
+            return Ok(());
         }
     }
 
@@ -52,8 +55,10 @@ fn main() {
 
     // NUX NMP-03:NUX NMP-03 MIDI 1 28:0
 
-    let devices = crate::device::Device::detect();
-    if devices.is_empty() {
-        log::warn!("No MIDI device found, exiting");
-    }
+    // let devices = crate::device::Device::detect();
+    // if devices.is_empty() {
+    //     log::warn!("No MIDI device found, exiting");
+    // }
+
+    Ok(())
 }
