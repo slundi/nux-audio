@@ -1,6 +1,8 @@
+mod command_devices;
+
 use clap::{Args, Parser, Subcommand};
-use nux_audio::MidiManager;
 use std::path::PathBuf;
+use command_devices::list as list_devices;
 
 #[derive(Parser)]
 #[command(name = "nux-audio")]
@@ -21,21 +23,10 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn process(self) {
+    pub async fn process(self) {
         match self.command {
             Commands::Devices => {
-                println!("Listing available devices...");
-                match MidiManager::new() {
-                    Ok(manager) => {
-                        let ports = manager.list_ports();
-                        println!("{} MIDI ports found", ports.len());
-                        // TODO: filter NUX devices from name
-                        for (port, name) in ports {
-                            println!("* {port}\t{name}");
-                        }
-                    }
-                    Err(_) => eprintln!("Cannot list devices"),
-                }
+                list_devices().await;
             }
             Commands::Info => {
                 println!("Showing device info...");
