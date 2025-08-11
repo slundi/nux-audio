@@ -1,10 +1,17 @@
+use std::collections::HashMap;
+
+use super::{
+    BaseNuxDevice, DeviceInfo, DeviceModel, NuxDevice, MIGHTY_PLUG_PRO_DEVICE_ID,
+};
+use crate::poc::{Effect, EffectParameter, EffectType, MidiCommand, Preset};
+
 #[derive(Debug, Clone)]
 pub struct MightyPlugPro {
     base: BaseNuxDevice,
 }
 
-impl MightyPlugPro {
-    pub fn new() -> Self {
+impl Default for MightyPlugPro {
+    fn default() -> Self {
         let info = DeviceInfo {
             model: DeviceModel::MightyPlugPro,
             firmware_version: "1.0.0".to_string(),
@@ -332,56 +339,5 @@ impl NuxDevice for MightyPlugPro {
 
     fn get_bluetooth_names(&self) -> Vec<String> {
         self.base.get_bluetooth_names()
-    }
-}
-
-// Device detection utilities
-pub struct DeviceDetector;
-
-impl DeviceDetector {
-    /// Detect device from Bluetooth name
-    pub fn detect_from_bluetooth_name(name: &str) -> Option<DeviceModel> {
-        match name.to_uppercase().as_str() {
-            "MIGHTY PLUG" => Some(DeviceModel::MightyPlug),
-            "MIGHTY PLUG PRO" => Some(DeviceModel::MightyPlugPro),
-            "MIGHTY AIR" => Some(DeviceModel::MightyAir),
-            "MIGHTY SPACE" => Some(DeviceModel::MightySpace),
-            _ if name.to_uppercase().contains("MIGHTY") => {
-                Some(DeviceModel::Unknown(name.to_string()))
-            }
-            _ => None,
-        }
-    }
-
-    /// Detect device from SysEx message
-    pub fn detect_from_sysex(data: &[u8]) -> Option<DeviceModel> {
-        if data.len() < 5 {
-            return None;
-        }
-
-        // Check if it's a NUX SysEx message
-        if data[0] != SYSEX_START || data[1..4] != NUX_MANUFACTURER_ID {
-            return None;
-        }
-
-        let device_id = data[4];
-        match device_id {
-            MIGHTY_PLUG_DEVICE_ID => Some(DeviceModel::MightyPlug),
-            MIGHTY_PLUG_PRO_DEVICE_ID => Some(DeviceModel::MightyPlugPro),
-            MIGHTY_AIR_DEVICE_ID => Some(DeviceModel::MightyAir),
-            MIGHTY_SPACE_DEVICE_ID => Some(DeviceModel::MightySpace),
-            _ => Some(DeviceModel::Unknown(format!("Device ID: {}", device_id))),
-        }
-    }
-
-    /// Create device instance based on detected model
-    pub fn create_device(model: DeviceModel) -> Option<Box<dyn NuxDevice>> {
-        match model {
-            DeviceModel::MightyPlug => Some(Box::new(MightyPlug::new())),
-            DeviceModel::MightyPlugPro => Some(Box::new(MightyPlugPro::new())),
-            DeviceModel::MightyAir => Some(Box::new(MightyAir::new())),
-            DeviceModel::MightySpace => Some(Box::new(MightySpace::new())),
-            DeviceModel::Unknown(_) => None,
-        }
     }
 }

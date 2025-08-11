@@ -1,10 +1,15 @@
+use std::collections::HashMap;
+
+use super::{BaseNuxDevice, DeviceInfo, DeviceModel, NuxDevice, MIGHTY_PLUG_DEVICE_ID};
+use crate::poc::{Effect, EffectParameter, EffectType, MidiCommand, Preset};
+
 #[derive(Debug, Clone)]
 pub struct MightyPlug {
     base: BaseNuxDevice,
 }
 
-impl MightyPlug {
-    pub fn new() -> Self {
+impl Default for MightyPlug {
+    fn default() -> Self {
         let info = DeviceInfo {
             model: DeviceModel::MightyPlug,
             firmware_version: "1.0.0".to_string(),

@@ -1,6 +1,20 @@
+pub mod mighty_air;
+pub mod mighty_plug;
+pub mod mighty_plug_pro;
+pub mod mighty_space;
+
+use mighty_air::MightyAir;
+use mighty_plug::MightyPlug;
+use mighty_plug_pro::MightyPlugPro;
+use mighty_space::MightySpace;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+
 // NUX Device definitions and mappings
-use crate::{DeviceType, EffectType, NuxDevice};
-use std::collections::HashMap;
+use crate::{
+    poc::{Effect, MidiCommand, Preset},
+    SYSEX_END, SYSEX_START,
+};
 
 pub const NUX_MANUFACTURER_ID: [u8; 3] = [0x00, 0x21, 0x21];
 
@@ -9,6 +23,212 @@ pub const MIGHTY_PLUG_DEVICE_ID: u8 = 0x01;
 pub const MIGHTY_PLUG_PRO_DEVICE_ID: u8 = 0x02;
 pub const MIGHTY_AIR_DEVICE_ID: u8 = 0x03;
 pub const MIGHTY_SPACE_DEVICE_ID: u8 = 0x04;
+
+// Base implementation for common NUX device functionality
+#[derive(Debug, Clone)]
+pub struct BaseNuxDevice {
+    pub info: DeviceInfo,
+    pub presets: Vec<Preset>,
+    pub current_preset_id: Option<u8>,
+    pub effects: Vec<Effect>,
+}
+
+impl BaseNuxDevice {
+    pub fn new(info: DeviceInfo) -> Self {
+        Self {
+            info,
+            presets: Vec::new(),
+            current_preset_id: None,
+            effects: Vec::new(),
+        }
+    }
+
+    fn build_sysex_message(&self, command_data: &[u8]) -> Vec<u8> {
+        let mut message = vec![SYSEX_START];
+        message.extend_from_slice(&NUX_MANUFACTURER_ID);
+        message.push(self.info.device_id);
+        message.extend_from_slice(command_data);
+        message.push(SYSEX_END);
+        message
+    }
+
+    fn validate_sysex(&self, data: &[u8]) -> bool {
+        if data.len() < 6 {
+            return false;
+        }
+
+        data[0] == SYSEX_START
+            && data[1..4] == NUX_MANUFACTURER_ID
+            && data[4] == self.info.device_id
+            && data[data.len() - 1] == SYSEX_END
+    }
+}
+
+impl NuxDevice for BaseNuxDevice {
+    fn get_device_info(&self) -> &DeviceInfo {
+        &self.info
+    }
+
+    fn get_presets(&self) -> &[Preset] {
+        &self.presets
+    }
+
+    fn get_current_preset(&self) -> Option<&Preset> {
+        self.current_preset_id
+            .and_then(|id| self.presets.iter().find(|p| p.id == id))
+    }
+
+    fn set_preset(&mut self, preset_id: u8) -> Result<(), String> {
+        if preset_id >= self.info.max_presets {
+            return Err(format!(
+                "Preset {} out of range (max: {})",
+                preset_id,
+                self.info.max_presets - 1
+            ));
+        }
+        self.current_preset_id = Some(preset_id);
+        Ok(())
+    }
+
+    fn get_effects(&self) -> &[Effect] {
+        &self.effects
+    }
+
+    fn toggle_effect(&mut self, effect_id: u8) -> Result<(), String> {
+        if let Some(effect) = self.effects.get_mut(effect_id as usize) {
+            effect.enabled = !effect.enabled;
+            Ok(())
+        } else {
+            Err(format!("Effect {} not found", effect_id))
+        }
+    }
+
+    fn set_parameter(&mut self, effect_id: u8, param_name: &str, value: u8) -> Result<(), String> {
+        if let Some(effect) = self.effects.get_mut(effect_id as usize) {
+            if let Some(param) = effect.parameters.get_mut(param_name) {
+                if value >= param.min_value && value <= param.max_value {
+                    param.value = value;
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Value {} out of range for parameter {}",
+                        value, param_name
+                    ))
+                }
+            } else {
+                Err(format!("Parameter {} not found", param_name))
+            }
+        } else {
+            Err(format!("Effect {} not found", effect_id))
+        }
+    }
+
+    fn generate_sysex(&self, command: &MidiCommand) -> Result<Vec<u8>, String> {
+        let command_data = match command {
+            MidiCommand::PresetChange(preset_id) => vec![0x01, *preset_id],
+            MidiCommand::ParameterChange {
+                effect_id,
+                param_id,
+                value,
+            } => {
+                vec![0x02, *effect_id, *param_id, *value]
+            }
+            MidiCommand::EffectToggle { effect_id, enabled } => {
+                vec![0x03, *effect_id, if *enabled { 0x01 } else { 0x00 }]
+            }
+            MidiCommand::TunerOn => vec![0x04, 0x01],
+            MidiCommand::TunerOff => vec![0x04, 0x00],
+            MidiCommand::TapTempo => vec![0x05],
+            MidiCommand::LooperRecord => vec![0x06, 0x01],
+            MidiCommand::LooperPlay => vec![0x06, 0x02],
+            MidiCommand::LooperStop => vec![0x06, 0x00],
+            MidiCommand::DeviceInfo => vec![0x07],
+            MidiCommand::Custom(data) => data.clone(),
+        };
+
+        Ok(self.build_sysex_message(&command_data))
+    }
+
+    fn parse_sysex(&mut self, data: &[u8]) -> Result<Option<MidiCommand>, String> {
+        if !self.validate_sysex(data) {
+            return Err("Invalid SysEx message format".to_string());
+        }
+
+        if data.len() < 7 {
+            return Err("SysEx message too short".to_string());
+        }
+
+        let command_type = data[5];
+        let command = match command_type {
+            0x01 if data.len() >= 7 => Some(MidiCommand::PresetChange(data[6])),
+            0x02 if data.len() >= 9 => Some(MidiCommand::ParameterChange {
+                effect_id: data[6],
+                param_id: data[7],
+                value: data[8],
+            }),
+            0x03 if data.len() >= 8 => Some(MidiCommand::EffectToggle {
+                effect_id: data[6],
+                enabled: data[7] != 0,
+            }),
+            0x04 if data.len() >= 7 => {
+                if data[6] == 0x01 {
+                    Some(MidiCommand::TunerOn)
+                } else {
+                    Some(MidiCommand::TunerOff)
+                }
+            }
+            0x05 => Some(MidiCommand::TapTempo),
+            0x06 if data.len() >= 7 => match data[6] {
+                0x01 => Some(MidiCommand::LooperRecord),
+                0x02 => Some(MidiCommand::LooperPlay),
+                0x00 => Some(MidiCommand::LooperStop),
+                _ => None,
+            },
+            0x07 => Some(MidiCommand::DeviceInfo),
+            _ => Some(MidiCommand::Custom(data[5..data.len() - 1].to_vec())),
+        };
+
+        Ok(command)
+    }
+
+    fn get_bluetooth_names(&self) -> Vec<String> {
+        if self.info.supports_dual_bluetooth {
+            vec![
+                self.info.bluetooth_name.clone(),
+                format!("{} MIDI", self.info.bluetooth_name),
+            ]
+        } else {
+            vec![self.info.bluetooth_name.clone()]
+        }
+    }
+}
+
+/// Trait for NUX device capabilities
+pub trait NuxDevice {
+    fn get_device_info(&self) -> &DeviceInfo;
+    fn get_presets(&self) -> &[Preset];
+    fn get_current_preset(&self) -> Option<&Preset>;
+    fn set_preset(&mut self, preset_id: u8) -> Result<(), String>;
+    fn get_effects(&self) -> &[Effect];
+    fn toggle_effect(&mut self, effect_id: u8) -> Result<(), String>;
+    fn set_parameter(&mut self, effect_id: u8, param_name: &str, value: u8) -> Result<(), String>;
+    fn generate_sysex(&self, command: &MidiCommand) -> Result<Vec<u8>, String>;
+    fn parse_sysex(&mut self, data: &[u8]) -> Result<Option<MidiCommand>, String>;
+    fn get_bluetooth_names(&self) -> Vec<String>;
+}
+
+/// NUX device types
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DeviceType {
+    MightyPlug,
+    MightyPlugPro,
+    MightySpace,
+    MightyAir,
+    MightyLiteBt,
+    Mighty8Bt,
+    Mighty20Bt,
+    Mighty40Bt,
+}
 
 #[repr(u8)]
 #[derive(Debug, Clone, PartialEq)]
@@ -19,7 +239,6 @@ pub enum DeviceModel {
     MightySpace,
     Mg30,
     // Mg101,
-    // Mg30,
     // Mg300,
     // Mg400
     // MightyBass50bt
@@ -36,6 +255,7 @@ impl fmt::Display for DeviceModel {
             DeviceModel::MightyPlugPro => write!(f, "Mighty Plug Pro"),
             DeviceModel::MightyAir => write!(f, "Mighty Air"),
             DeviceModel::MightySpace => write!(f, "Mighty Space"),
+            DeviceModel::Mg30 => write!(f, "MG-30"),
             DeviceModel::Unknown(name) => write!(f, "Unknown({})", name),
         }
     }
@@ -49,242 +269,6 @@ pub struct DeviceInfo {
     pub bluetooth_name: String,
     pub supports_dual_bluetooth: bool,
     pub max_presets: u8,
-}
-
-/// Mighty Plug device implementation
-#[derive(Debug, Clone)]
-pub struct MightyPlug {
-    effect_mappings: HashMap<EffectType, u8>,
-}
-
-impl Default for MightyPlug {
-    fn default() -> Self {
-        let mut mappings = HashMap::new();
-        // Effect ID mappings for Mighty Plug
-        mappings.insert(EffectType::AmpClean, 0x00);
-        mappings.insert(EffectType::AmpCrunch, 0x01);
-        mappings.insert(EffectType::AmpLead, 0x02);
-        mappings.insert(EffectType::Overdrive, 0x10);
-        mappings.insert(EffectType::Distortion, 0x11);
-        mappings.insert(EffectType::Chorus, 0x20);
-        mappings.insert(EffectType::Flanger, 0x21);
-        mappings.insert(EffectType::Phaser, 0x22);
-        mappings.insert(EffectType::Delay, 0x30);
-        mappings.insert(EffectType::Reverb, 0x31);
-        mappings.insert(EffectType::Wah, 0x40);
-        mappings.insert(EffectType::Compressor, 0x41);
-        mappings.insert(EffectType::NoiseGate, 0x50);
-
-        Self {
-            effect_mappings: mappings,
-        }
-    }
-}
-
-impl NuxDevice for MightyPlug {
-    fn device_type(&self) -> DeviceType {
-        DeviceType::MightyPlug
-    }
-
-    fn supported_effects(&self) -> Vec<EffectType> {
-        vec![
-            EffectType::AmpClean,
-            EffectType::AmpCrunch,
-            EffectType::AmpLead,
-            EffectType::Overdrive,
-            EffectType::Distortion,
-            EffectType::Chorus,
-            EffectType::Flanger,
-            EffectType::Phaser,
-            EffectType::Delay,
-            EffectType::Reverb,
-            EffectType::Wah,
-            EffectType::Compressor,
-            EffectType::NoiseGate,
-        ]
-    }
-
-    fn effect_id(&self, effect_type: EffectType) -> Option<u8> {
-        self.effect_mappings.get(&effect_type).copied()
-    }
-
-    fn midi_channel(&self) -> u8 {
-        0x00 // Channel 1
-    }
-
-    fn sysex_header(&self) -> Vec<u8> {
-        vec![0xF0, 0x00, 0x20, 0x7E, 0x01] // NUX SysEx header for Mighty Plug
-    }
-}
-
-/// Mighty Plug Pro device implementation
-#[derive(Debug, Clone)]
-pub struct MightyPlugPro {
-    effect_mappings: HashMap<EffectType, u8>,
-}
-
-impl Default for MightyPlugPro {
-    fn default() -> Self {
-        let mut mappings = HashMap::new();
-        // Extended effect mappings for Mighty Plug Pro
-        mappings.insert(EffectType::AmpClean, 0x00);
-        mappings.insert(EffectType::AmpCrunch, 0x01);
-        mappings.insert(EffectType::AmpLead, 0x02);
-        mappings.insert(EffectType::AmpBass, 0x03);
-        mappings.insert(EffectType::AmpAcoustic, 0x04);
-        mappings.insert(EffectType::Overdrive, 0x10);
-        mappings.insert(EffectType::Distortion, 0x11);
-        mappings.insert(EffectType::Fuzz, 0x12);
-        mappings.insert(EffectType::TubeScreamer, 0x13);
-        mappings.insert(EffectType::MetalZone, 0x14);
-        mappings.insert(EffectType::Chorus, 0x20);
-        mappings.insert(EffectType::Flanger, 0x21);
-        mappings.insert(EffectType::Phaser, 0x22);
-        mappings.insert(EffectType::Tremolo, 0x23);
-        mappings.insert(EffectType::Vibrato, 0x24);
-        mappings.insert(EffectType::Rotary, 0x25);
-        mappings.insert(EffectType::Delay, 0x30);
-        mappings.insert(EffectType::Echo, 0x31);
-        mappings.insert(EffectType::Reverb, 0x32);
-        mappings.insert(EffectType::Wah, 0x40);
-        mappings.insert(EffectType::AutoWah, 0x41);
-        mappings.insert(EffectType::Compressor, 0x42);
-        mappings.insert(EffectType::NoiseGate, 0x50);
-        mappings.insert(EffectType::Boost, 0x51);
-        mappings.insert(EffectType::Tuner, 0x60);
-
-        Self {
-            effect_mappings: mappings,
-        }
-    }
-}
-
-impl NuxDevice for MightyPlugPro {
-    fn device_type(&self) -> DeviceType {
-        DeviceType::MightyPlugPro
-    }
-
-    fn supported_effects(&self) -> Vec<EffectType> {
-        vec![
-            EffectType::AmpClean,
-            EffectType::AmpCrunch,
-            EffectType::AmpLead,
-            EffectType::AmpBass,
-            EffectType::AmpAcoustic,
-            EffectType::Overdrive,
-            EffectType::Distortion,
-            EffectType::Fuzz,
-            EffectType::TubeScreamer,
-            EffectType::MetalZone,
-            EffectType::Chorus,
-            EffectType::Flanger,
-            EffectType::Phaser,
-            EffectType::Tremolo,
-            EffectType::Vibrato,
-            EffectType::Rotary,
-            EffectType::Delay,
-            EffectType::Echo,
-            EffectType::Reverb,
-            EffectType::Wah,
-            EffectType::AutoWah,
-            EffectType::Compressor,
-            EffectType::NoiseGate,
-            EffectType::Boost,
-            EffectType::Tuner,
-        ]
-    }
-
-    fn effect_id(&self, effect_type: EffectType) -> Option<u8> {
-        self.effect_mappings.get(&effect_type).copied()
-    }
-
-    fn midi_channel(&self) -> u8 {
-        0x00 // Channel 1
-    }
-
-    fn sysex_header(&self) -> Vec<u8> {
-        vec![0xF0, 0x00, 0x20, 0x7E, 0x02] // NUX SysEx header for Mighty Plug Pro
-    }
-}
-
-/// Mighty 20BT device implementation
-#[derive(Debug, Clone)]
-pub struct Mighty20Bt {
-    effect_mappings: HashMap<EffectType, u8>,
-}
-
-impl Default for Mighty20Bt {
-    fn default() -> Self {
-        let mut mappings = HashMap::new();
-        // Effect mappings for Mighty 20BT
-        mappings.insert(EffectType::AmpClean, 0x00);
-        mappings.insert(EffectType::AmpCrunch, 0x01);
-        mappings.insert(EffectType::AmpLead, 0x02);
-        mappings.insert(EffectType::Overdrive, 0x10);
-        mappings.insert(EffectType::Distortion, 0x11);
-        mappings.insert(EffectType::Fuzz, 0x12);
-        mappings.insert(EffectType::Chorus, 0x20);
-        mappings.insert(EffectType::Flanger, 0x21);
-        mappings.insert(EffectType::Delay, 0x30);
-        mappings.insert(EffectType::Reverb, 0x31);
-        mappings.insert(EffectType::Compressor, 0x40);
-        mappings.insert(EffectType::NoiseGate, 0x50);
-
-        Self {
-            effect_mappings: mappings,
-        }
-    }
-}
-
-impl NuxDevice for Mighty20Bt {
-    fn device_type(&self) -> DeviceType {
-        DeviceType::Mighty20Bt
-    }
-
-    fn supported_effects(&self) -> Vec<EffectType> {
-        vec![
-            EffectType::AmpClean,
-            EffectType::AmpCrunch,
-            EffectType::AmpLead,
-            EffectType::Overdrive,
-            EffectType::Distortion,
-            EffectType::Fuzz,
-            EffectType::Chorus,
-            EffectType::Flanger,
-            EffectType::Delay,
-            EffectType::Reverb,
-            EffectType::Compressor,
-            EffectType::NoiseGate,
-        ]
-    }
-
-    fn effect_id(&self, effect_type: EffectType) -> Option<u8> {
-        self.effect_mappings.get(&effect_type).copied()
-    }
-
-    fn midi_channel(&self) -> u8 {
-        0x00 // Channel 1
-    }
-
-    fn sysex_header(&self) -> Vec<u8> {
-        vec![0xF0, 0x00, 0x20, 0x7E, 0x03] // NUX SysEx header for Mighty 20BT
-    }
-}
-
-/// Device factory for creating device instances
-pub struct DeviceFactory;
-
-impl DeviceFactory {
-    pub fn create_device(device_type: DeviceType) -> Box<dyn NuxDevice> {
-        match device_type {
-            DeviceType::MightyPlug => Box::new(MightyPlug::default()),
-            DeviceType::MightyPlugPro => Box::new(MightyPlugPro::default()),
-            DeviceType::MightySpace => Box::new(MightyPlugPro::default()), // Same as Pro
-            DeviceType::Mighty20Bt => Box::new(Mighty20Bt::default()),
-            DeviceType::Mighty40Bt => Box::new(Mighty20Bt::default()), // Same as 20BT
-            _ => Box::new(MightyPlug::default()),                      // Default fallback
-        }
-    }
 }
 
 // Device detection utilities
@@ -306,7 +290,8 @@ impl DeviceDetector {
     }
 
     pub fn detect_from_midi_name(name: &str) -> Option<DeviceModel> {
-        let name = name.to_uppercase().as_str();
+        let name = name.to_uppercase();
+        let name = name.as_str();
         if name.starts_with("NUX-NMP-03") {
             return Some(DeviceModel::MightyPlugPro);
         }
@@ -340,61 +325,11 @@ impl DeviceDetector {
     /// Create device instance based on detected model
     pub fn create_device(model: DeviceModel) -> Option<Box<dyn NuxDevice>> {
         match model {
-            DeviceModel::MightyPlug => Some(Box::new(MightyPlug::new())),
-            DeviceModel::MightyPlugPro => Some(Box::new(MightyPlugPro::new())),
-            DeviceModel::MightyAir => Some(Box::new(MightyAir::new())),
-            DeviceModel::MightySpace => Some(Box::new(MightySpace::new())),
-            DeviceModel::Unknown(_) => None,
-        }
-    }
-}
-
-// Device detection utilities
-pub struct DeviceDetector;
-
-impl DeviceDetector {
-    /// Detect device from Bluetooth name
-    pub fn detect_from_bluetooth_name(name: &str) -> Option<DeviceModel> {
-        match name.to_uppercase().as_str() {
-            "MIGHTY PLUG" => Some(DeviceModel::MightyPlug),
-            "MIGHTY PLUG PRO" => Some(DeviceModel::MightyPlugPro),
-            "MIGHTY AIR" => Some(DeviceModel::MightyAir),
-            "MIGHTY SPACE" => Some(DeviceModel::MightySpace),
-            _ if name.to_uppercase().contains("MIGHTY") => {
-                Some(DeviceModel::Unknown(name.to_string()))
-            }
-            _ => None,
-        }
-    }
-
-    /// Detect device from SysEx message
-    pub fn detect_from_sysex(data: &[u8]) -> Option<DeviceModel> {
-        if data.len() < 5 {
-            return None;
-        }
-
-        // Check if it's a NUX SysEx message
-        if data[0] != SYSEX_START || data[1..4] != NUX_MANUFACTURER_ID {
-            return None;
-        }
-
-        let device_id = data[4];
-        match device_id {
-            MIGHTY_PLUG_DEVICE_ID => Some(DeviceModel::MightyPlug),
-            MIGHTY_PLUG_PRO_DEVICE_ID => Some(DeviceModel::MightyPlugPro),
-            MIGHTY_AIR_DEVICE_ID => Some(DeviceModel::MightyAir),
-            MIGHTY_SPACE_DEVICE_ID => Some(DeviceModel::MightySpace),
-            _ => Some(DeviceModel::Unknown(format!("Device ID: {}", device_id))),
-        }
-    }
-
-    /// Create device instance based on detected model
-    pub fn create_device(model: DeviceModel) -> Option<Box<dyn NuxDevice>> {
-        match model {
-            DeviceModel::MightyPlug => Some(Box::new(MightyPlug::new())),
-            DeviceModel::MightyPlugPro => Some(Box::new(MightyPlugPro::new())),
-            DeviceModel::MightyAir => Some(Box::new(MightyAir::new())),
-            DeviceModel::MightySpace => Some(Box::new(MightySpace::new())),
+            DeviceModel::MightyPlug => Some(Box::new(MightyPlug::default())),
+            DeviceModel::MightyPlugPro => Some(Box::new(MightyPlugPro::default())),
+            DeviceModel::MightyAir => Some(Box::new(MightyAir::default())),
+            DeviceModel::MightySpace => Some(Box::new(MightySpace::default())),
+            DeviceModel::Mg30 => todo!(),
             DeviceModel::Unknown(_) => None,
         }
     }
@@ -449,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_device_creation() {
-        let mighty_plug = MightyPlug::new();
+        let mighty_plug = MightyPlug::default();
         assert_eq!(mighty_plug.get_device_info().model, DeviceModel::MightyPlug);
         assert_eq!(mighty_plug.get_device_info().max_presets, 7);
         assert!(mighty_plug.get_device_info().supports_dual_bluetooth);
@@ -457,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_sysex_generation() {
-        let device = MightyPlug::new();
+        let device = MightyPlug::default();
         let command = MidiCommand::PresetChange(3);
         let sysex = device.generate_sysex(&command).unwrap();
 
@@ -495,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_effect_parameter_modification() {
-        let mut device = MightyPlug::new();
+        let mut device = MightyPlug::default();
 
         // Test setting a parameter
         assert!(device.set_parameter(1, "gain", 100).is_ok()); // Amp gain

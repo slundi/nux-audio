@@ -1,16 +1,16 @@
 // // Main NUX Audio Effects Library
 // use std::collections::HashMap;
 
-// pub mod devices;
+pub mod devices;
 // pub mod effects;
+pub mod poc;
 pub mod midi;
 // pub mod presets;
 
-// pub use devices::*;
 // pub use effects::*;
+pub use poc::*;
 pub use midi::*;
 // pub use presets::*;
-// use serde::{Deserialize, Serialize};
 
 // /// Main trait for all NUX audio effects
 // pub trait Effect: std::fmt::Debug + Clone{
@@ -36,24 +36,6 @@ pub use midi::*;
 //     fn from_sysex(data: &[u8], device_type: DeviceType) -> Result<Self, EffectError>
 //     where
 //         Self: Sized;
-// }
-
-// /// Trait for NUX devices that support effects
-// pub trait NuxDevice {
-//     /// Get device type
-//     fn device_type(&self) -> DeviceType;
-
-//     /// Get supported effects for this device
-//     fn supported_effects(&self) -> Vec<EffectType>;
-
-//     /// Get device-specific effect ID mapping
-//     fn effect_id(&self, effect_type: EffectType) -> Option<u8>;
-
-//     /// Get MIDI channel for this device
-//     fn midi_channel(&self) -> u8;
-
-//     /// Get device-specific SysEx header
-//     fn sysex_header(&self) -> Vec<u8>;
 // }
 
 // /// Effect parameter definition
@@ -106,19 +88,6 @@ pub use midi::*;
 //     Tuner,
 //     NoiseGate,
 //     Boost,
-// }
-
-// /// NUX device types
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-// pub enum DeviceType {
-//     MightyPlug,
-//     MightyPlugPro,
-//     MightySpace,
-//     MightyAir,
-//     MightyLiteBt,
-//     Mighty8Bt,
-//     Mighty20Bt,
-//     Mighty40Bt,
 // }
 
 // /// Effect processing errors
