@@ -1,16 +1,27 @@
 use nux_audio::MidiManager;
 
-pub fn list() {
-    println!("Listing available devices...");
+#[derive(Debug, Clone, PartialEq)]
+pub struct Port {
+    pub port: usize,
+    pub name: String,
+    pub is_output: bool,
+}
+
+pub fn list() -> Vec<Port> {
+    let mut ports: Vec<Port> = Vec::new();
     match MidiManager::new() {
         Ok(manager) => {
-            let ports = manager.list_ports();
-            println!("{} MIDI ports found", ports.len());
             // TODO: filter NUX devices from name
-            for (port, name) in ports {
-                println!("* {port}\t{name}");
+            for (port, name) in manager.list_output_ports() {
+                ports.push(Port {port, name, is_output: true});
+            }
+            for (port, name) in manager.list_input_ports() {
+                ports.push(Port {port, name, is_output: false});
             }
         }
-        Err(_) => eprintln!("Cannot list devices"),
+        Err(e) => {
+            eprintln!("Cannot list MIDI output ports: {e}");
+        }
     }
+    ports
 }

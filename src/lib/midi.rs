@@ -1,26 +1,31 @@
 // MIDI utilities and SysEx helpers
 // use crate::DeviceType;
-use midir::{MidiOutput, MidiOutputConnection};
+use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 use std::error::Error;
 
 /// MIDI connection manager for NUX devices
 pub struct MidiManager {
+    input: MidiInput,
     output: MidiOutput,
-    connection: Option<MidiOutputConnection>,
+    connection_in: Option<MidiInputConnection<()>>,
+    connection_out: Option<MidiOutputConnection>,
 }
 
 impl MidiManager {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let output = MidiOutput::new("NUX Audio MIDI Output")?;
+        let input = MidiInput::new("NUX Audio MIDI Input")?;
 
         Ok(Self {
+            input,
             output,
-            connection: None,
+            connection_in: None,
+            connection_out: None,
         })
     }
 
     /// List available MIDI output ports
-    pub fn list_ports(&self) -> Vec<(usize, String)> {
+    pub fn list_output_ports(&self) -> Vec<(usize, String)> {
         let ports = self.output.ports();
         ports
             .iter()
@@ -29,27 +34,51 @@ impl MidiManager {
             .collect()
     }
 
+    /// List available MIDI input ports
+    pub fn list_input_ports(&self) -> Vec<(usize, String)> {
+        let ports = self.input.ports();
+        ports
+            .iter()
+            .enumerate()
+            .filter_map(|(i, port)| self.input.port_name(port).ok().map(|name| (i, name)))
+            .collect()
+    }
+
     /// Connect to a MIDI port by index
-    pub fn connect(&mut self, port_index: usize) -> Result<(), Box<dyn Error>> {
-        let ports = self.output.ports();
-        if port_index >= ports.len() {
-            return Err("Port index out of range".into());
+    pub fn connect(&mut self, port_in: usize, port_out: usize) -> Result<(), Box<dyn Error>> {
+        // check port range
+        let ports_out = self.output.ports();
+        if port_out >= ports_out.len() {
+            return Err("Output port index out of range".into());
+        }
+        let ports_in = self.input.ports();
+        if port_in >= ports_in.len() {
+            return Err("Input port index out of range".into());
         }
 
-        let port = &ports[port_index];
+        let port = &ports_out[port_out];
         let port_name = self.output.port_name(port)?;
 
         // Create a new output instance for the connection
         let output = MidiOutput::new("NUX Audio MIDI Output")?;
-        let connection = output.connect(port, &format!("nux-audio-{}", port_name))?;
+        let connection_out = output.connect(port, &format!("nux-audio-{}", port_name))?;
 
-        self.connection = Some(connection);
+        let port = &ports_in[port_in];
+        let port_name = self.input.port_name(port)?;
+
+        let input = MidiInput::new("NUX Audio MIDI Intput")?;
+        let connection_in = input.connect(port, &format!("nux-audio-{}", port_name), move |stamp, message, _| {
+            todo!()
+        }, ())?;
+
+        self.connection_out = Some(connection_out);
+        self.connection_in = Some(connection_in);
         Ok(())
     }
 
     /// Send SysEx data to the connected device
     pub fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
-        match &mut self.connection {
+        match &mut self.connection_out {
             Some(conn) => {
                 conn.send(data)?;
                 Ok(())
@@ -99,7 +128,8 @@ impl MidiManager {
 
     /// Disconnect from the current MIDI device
     pub fn disconnect(&mut self) {
-        self.connection = None;
+        self.connection_out = None;
+        self.connection_in = None;
     }
 }
 

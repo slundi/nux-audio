@@ -1,8 +1,11 @@
 mod command_devices;
 
 use clap::{Args, Parser, Subcommand};
-use std::path::PathBuf;
 use command_devices::list as list_devices;
+use nux_audio::MidiManager;
+use std::path::PathBuf;
+
+use crate::nux_sys_ex_commands::DEVICE_VERSION_REQUEST;
 
 #[derive(Parser)]
 #[command(name = "nux-audio")]
@@ -16,7 +19,7 @@ pub struct Cli {
 
     /// MIDI port to use (alternative to device name)
     #[arg(short = 'p', long = "port", global = true)]
-    pub midi_port: Option<String>,
+    pub midi_port: Option<usize>,
 
     #[command(subcommand)]
     pub command: Commands,
@@ -26,12 +29,20 @@ impl Cli {
     pub async fn process(self) {
         match self.command {
             Commands::Devices => {
-                list_devices();
+                println!("Listing available devices...");
+                let ports = list_devices();
+                println!("{} MIDI ports found", ports.len());
+                for port in ports {
+                    // TODO: highlight Nux devices
+                    println!(
+                        "* {}\t{}\t{}",
+                        port.port,
+                        if port.is_output { "OUT" } else { "IN" },
+                        port.name
+                    );
+                }
             }
-            Commands::Info => {
-                println!("Showing device info...");
-                // TODO: error if multiple device otherwise send SysEx
-            }
+            Commands::Info => self.info(),
             Commands::Preset { action } => match action {
                 PresetAction::Show => println!("Showing current preset..."),
                 PresetAction::Get(args) => {
@@ -54,6 +65,54 @@ impl Cli {
                 }
             }
         };
+    }
+
+    fn info(self) {
+        println!("Showing device info...");
+        match MidiManager::new() {
+            Ok(mut manager) => {
+                let ports = list_devices();
+                let mut port_in = 0usize;
+                let mut port_out = 0usize;
+                if self.device_name.is_none() && self.midi_port.is_none() && ports.len() == 2 {
+                    // use the only available MIDI port
+                    if ports[0].is_output {
+                        port_out = ports[0].port;
+                        port_in = ports[1].port;
+                    } else {
+                        port_out = ports[1].port;
+                        port_in = ports[0].port;
+                    }
+                // } else if let Some(p) = self.midi_port {
+                //     // port chosen by user
+                //     port = p;
+                } else if let Some(n) = self.device_name {
+                    // get the device by the provided name
+                    for port in ports {
+                        if n == port.name {
+                            if port.is_output {
+                                port_out = port.port;
+                            } else {
+                                port_in = port.port;
+                            }
+                        }
+                    }
+                } else {
+                    eprint!("No device avialable");
+                    return;
+                }
+                if let Err(e) = manager.connect(port_in, port_out) {
+                    eprint!("Cannot connect to MIDI port: {e}");
+                    return;
+                }
+                match manager.send_sysex(&DEVICE_VERSION_REQUEST) {
+                    Ok(_) => todo!(),
+                    Err(e) => eprint!("SysEx command error: {e}"),
+                }
+            }
+            Err(e) => eprintln!("Cannot start MIDI manager: {e}"),
+        }
+        // TODO: error if multiple device otherwise send SysEx
     }
 }
 
