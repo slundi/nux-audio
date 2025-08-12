@@ -14,8 +14,6 @@ impl Default for MightyAir {
             model: DeviceModel::MightyAir,
             firmware_version: "1.0.0".to_string(),
             device_id: MIGHTY_AIR_DEVICE_ID,
-            bluetooth_name: "MIGHTY AIR".to_string(),
-            supports_dual_bluetooth: true,
             max_presets: 8,
         };
 
@@ -279,9 +277,5 @@ impl NuxDevice for MightyAir {
 
     fn parse_sysex(&mut self, data: &[u8]) -> Result<Option<MidiCommand>, String> {
         self.base.parse_sysex(data)
-    }
-
-    fn get_bluetooth_names(&self) -> Vec<String> {
-        self.base.get_bluetooth_names()
     }
 }

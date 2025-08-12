@@ -10,7 +10,6 @@ homepage = "https://codeberg.org/slundi/nux-audio"
 repository = "https://codeberg.org/slundi/nux-audio"
 
 [features]
-bt = ["dep:btleplug", "dep:uuid"]
 
 [dependencies]
 anyhow = "1.0"                                             # snafu or thiserror instead?
@@ -25,8 +24,6 @@ xdg = "3.0"
 # crossterm = "0.29"
 
 tokio = { version = "1.47", features = ["full"] }
-btleplug = { version = "0.11", default-features = false, features = ["bt"] }
-uuid = { version = "1.18", default-features = false, features = ["bt"] }
 
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }

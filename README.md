@@ -31,7 +31,6 @@ nux-cli -h
 ## Roadmap
 
 * [x] Connect to a MIDI device
-* [ ] Connect to a MIDI device through BLE (Bluetooth Low Energy)
 * [ ] Detect the device type
 * [ ] Get the device version
 * [ ] Get the current preset
@@ -70,3 +69,7 @@ Various unknow features:
   - [ ] display IR
   - [ ] select scene (keys: `shift + s`, `shift + 1`, `shift + 2`, `shift + 3`)
   - [ ] effect configuration (`n` noise gate, `r` reverb, `d` delay, `e` equalizer, `x` efx, `c` compression, `i` IR, `a` amp), `shift` to enable/disable
+
+### Dropped
+
+* Connect to a MIDI device through BLE (Bluetooth Low Energy): the program will not handle USB or bluetooth connection. MIDIR lib can communicate with any MIDI connected devices so this is useless.

@@ -14,8 +14,6 @@ impl Default for MightySpace {
             model: DeviceModel::MightySpace,
             firmware_version: "1.0.0".to_string(),
             device_id: MIGHTY_SPACE_DEVICE_ID,
-            bluetooth_name: "MIGHTY SPACE".to_string(),
-            supports_dual_bluetooth: false,
             max_presets: 8,
         };
 
@@ -202,9 +200,5 @@ impl NuxDevice for MightySpace {
 
     fn parse_sysex(&mut self, data: &[u8]) -> Result<Option<MidiCommand>, String> {
         self.base.parse_sysex(data)
-    }
-
-    fn get_bluetooth_names(&self) -> Vec<String> {
-        self.base.get_bluetooth_names()
     }
 }

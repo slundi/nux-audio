@@ -190,17 +190,6 @@ impl NuxDevice for BaseNuxDevice {
 
         Ok(command)
     }
-
-    fn get_bluetooth_names(&self) -> Vec<String> {
-        if self.info.supports_dual_bluetooth {
-            vec![
-                self.info.bluetooth_name.clone(),
-                format!("{} MIDI", self.info.bluetooth_name),
-            ]
-        } else {
-            vec![self.info.bluetooth_name.clone()]
-        }
-    }
 }
 
 /// Trait for NUX device capabilities
@@ -214,7 +203,6 @@ pub trait NuxDevice {
     fn set_parameter(&mut self, effect_id: u8, param_name: &str, value: u8) -> Result<(), String>;
     fn generate_sysex(&self, command: &MidiCommand) -> Result<Vec<u8>, String>;
     fn parse_sysex(&mut self, data: &[u8]) -> Result<Option<MidiCommand>, String>;
-    fn get_bluetooth_names(&self) -> Vec<String>;
 }
 
 /// NUX device types
@@ -266,8 +254,6 @@ pub struct DeviceInfo {
     pub model: DeviceModel,
     pub firmware_version: String,
     pub device_id: u8,
-    pub bluetooth_name: String,
-    pub supports_dual_bluetooth: bool,
     pub max_presets: u8,
 }
 
@@ -275,20 +261,6 @@ pub struct DeviceInfo {
 pub struct DeviceDetector;
 
 impl DeviceDetector {
-    /// Detect device from Bluetooth name
-    pub fn detect_from_bluetooth_name(name: &str) -> Option<DeviceModel> {
-        match name.to_uppercase().as_str() {
-            "MIGHTY PLUG" => Some(DeviceModel::MightyPlug),
-            "MIGHTY PLUG PRO" => Some(DeviceModel::MightyPlugPro),
-            "MIGHTY AIR" => Some(DeviceModel::MightyAir),
-            "MIGHTY SPACE" => Some(DeviceModel::MightySpace),
-            _ if name.to_uppercase().contains("MIGHTY") => {
-                Some(DeviceModel::Unknown(name.to_string()))
-            }
-            _ => None,
-        }
-    }
-
     pub fn detect_from_midi_name(name: &str) -> Option<DeviceModel> {
         let name = name.to_uppercase();
         let name = name.as_str();
@@ -387,7 +359,6 @@ mod tests {
         let mighty_plug = MightyPlug::default();
         assert_eq!(mighty_plug.get_device_info().model, DeviceModel::MightyPlug);
         assert_eq!(mighty_plug.get_device_info().max_presets, 7);
-        assert!(mighty_plug.get_device_info().supports_dual_bluetooth);
     }
 
     #[test]
@@ -406,11 +377,6 @@ mod tests {
 
     #[test]
     fn test_device_detection() {
-        assert_eq!(
-            DeviceDetector::detect_from_bluetooth_name("MIGHTY PLUG"),
-            Some(DeviceModel::MightyPlug)
-        );
-
         let sysex = vec![
             SYSEX_START,
             NUX_MANUFACTURER_ID[0],

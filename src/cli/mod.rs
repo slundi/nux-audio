@@ -26,7 +26,7 @@ impl Cli {
     pub async fn process(self) {
         match self.command {
             Commands::Devices => {
-                list_devices().await;
+                list_devices();
             }
             Commands::Info => {
                 println!("Showing device info...");

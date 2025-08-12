@@ -16,8 +16,6 @@ impl Default for MightyPlugPro {
             model: DeviceModel::MightyPlugPro,
             firmware_version: "1.0.0".to_string(),
             device_id: MIGHTY_PLUG_PRO_DEVICE_ID,
-            bluetooth_name: "MIGHTY PLUG PRO".to_string(),
-            supports_dual_bluetooth: true,
             max_presets: 16,
         };
 
@@ -335,9 +333,5 @@ impl NuxDevice for MightyPlugPro {
 
     fn parse_sysex(&mut self, data: &[u8]) -> Result<Option<MidiCommand>, String> {
         self.base.parse_sysex(data)
-    }
-
-    fn get_bluetooth_names(&self) -> Vec<String> {
-        self.base.get_bluetooth_names()
     }
 }

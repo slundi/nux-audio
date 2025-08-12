@@ -1,7 +1,5 @@
 use clap::Parser;
 
-#[cfg(feature = "bt")]
-pub mod bluetooth;
 pub mod cli;
 pub mod device;
 pub mod effects;

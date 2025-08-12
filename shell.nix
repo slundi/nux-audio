@@ -22,10 +22,6 @@ pkgs.mkShell {
     pkg-config
     alsa-lib
     dbus
-
-    # for the bluetooth
-    bluez
-    systemd
   ];
 
   packages = with pkgs; [
