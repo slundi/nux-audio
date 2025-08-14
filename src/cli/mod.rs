@@ -3,9 +3,15 @@ mod command_devices;
 use clap::{Args, Parser, Subcommand};
 use command_devices::list as list_devices;
 use nux_audio::MidiManager;
-use std::path::PathBuf;
+use std::{
+    io::{stdin, stdout, Write},
+    path::PathBuf,
+};
 
-use crate::nux_sys_ex_commands::DEVICE_VERSION_REQUEST;
+use nux_audio::{
+    nux_sys_ex_commands::DEVICE_VERSION_REQUEST,
+    string::{decimal_string_to_vec_u8, hex_string_to_vec_u8},
+};
 
 #[derive(Parser)]
 #[command(name = "nux-audio")]
@@ -64,7 +70,35 @@ impl Cli {
                     println!("  Setting parameter: {}", param);
                 }
             }
+            Commands::Raw {
+                ref data,
+                decimal,
+                with_prefixes,
+            } => {
+                // TODO: prepare string to be sent
+                let prepared = data.join(" ");
+                if decimal {
+                    match decimal_string_to_vec_u8(&prepared) {
+                        Ok(cleaned) => self.send_raw(&cleaned),
+                        Err(e) => eprintln!("{e}"),
+                    }
+                } else {
+                    match hex_string_to_vec_u8(&prepared) {
+                        Ok(cleaned) => self.send_raw(&cleaned),
+                        Err(e) => eprintln!("{e}"),
+                    }
+                }
+            }
         };
+    }
+
+    fn get_manager() {
+
+    }
+
+    fn send_raw(self, data: &[u8]) {
+        println!("Sending message: {:?} (replace with formated string", data);
+        // TODO: get device
     }
 
     fn info(self) {
@@ -106,7 +140,7 @@ impl Cli {
                     return;
                 }
                 match manager.send_sysex(&DEVICE_VERSION_REQUEST) {
-                    Ok(_) => todo!(),
+                    Ok(result) => println!("TODO: handle SysEx result"),
                     Err(e) => eprint!("SysEx command error: {e}"),
                 }
             }
@@ -139,6 +173,20 @@ pub enum Commands {
         /// Example: "gain=80,tone=50" or "1=80,2=50"
         #[arg(value_parser = parse_effect_parameters)]
         parameters: Vec<EffectParameter>,
+    },
+
+    /// Send raw SysEx data, you do not need to give the start and end bytes.
+    Raw {
+        /// Hex string with space or not or decimal string with spaces
+        data: Vec<String>,
+
+        /// Decimal format
+        decimal: bool,
+
+        /// After the SysEx start byte, you need to specify some bytes like the device ID. By
+        /// default it uses the configured for the device but you can try with your own sequence
+        /// in the message data.
+        with_prefixes: bool,
     },
 }
 
@@ -229,6 +277,15 @@ pub fn parse_effect_params_from_string(input: &str) -> Result<Vec<EffectParamete
         .split(',')
         .map(|param| parse_effect_parameters(param.trim()))
         .collect()
+}
+
+/// Helper to get user input from the interractive CLI
+fn get_user_input(prompt: &str) -> String {
+    print!("{}", prompt);
+    stdout().flush().unwrap();
+    let mut input = String::new();
+    stdin().read_line(&mut input).unwrap();
+    input.trim().to_string()
 }
 
 #[cfg(test)]

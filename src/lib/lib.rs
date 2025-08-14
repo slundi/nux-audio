@@ -6,6 +6,7 @@ pub mod devices;
 pub mod poc;
 pub mod midi;
 // pub mod presets;
+pub mod string;
 
 // pub use effects::*;
 pub use poc::*;
