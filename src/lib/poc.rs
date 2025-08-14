@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
 // MIDI constants
-pub const SYSEX_START: u8 = 0xF0;
-pub const SYSEX_END: u8 = 0xF7;
 pub const NUX_MANUFACTURER_ID: [u8; 3] = [0x00, 0x21, 0x21]; // Example - actual ID may vary
 
 #[derive(Debug, Clone, PartialEq, Eq)]

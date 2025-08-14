@@ -4,8 +4,6 @@ use std::fs::OpenOptions;
 pub mod cli;
 pub mod device;
 pub mod effects;
-pub mod midi;
-pub mod nux_sys_ex_commands;
 pub mod preset;
 pub mod utils;
 
@@ -43,9 +41,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let xdg_dirs = xdg::BaseDirectories::new();
     configure_logger(&xdg_dirs);
-
-    // crate::midi::print_inputs();
-    // crate::midi::print_outputs();
 
     // NUX NMP-03:NUX NMP-03 MIDI 1 28:0
 

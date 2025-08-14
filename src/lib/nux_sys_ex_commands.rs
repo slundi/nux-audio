@@ -99,21 +99,22 @@ mod tests {
         assert_eq!(change_scene(3).unwrap(), [176, 79, 3]);
     }
 
-    fn test_sysex_message() {
-        // test build
-        assert_eq!(
-            build_sysex_message(&DEVICE_VERSION_REQUEST),
-            [0xf0, 0x43, 0x58, 0x00, 0xf7]
-        );
+    // #[test]
+    // fn test_sysex_message() {
+    //     // test build
+    //     assert_eq!(
+    //         build_sysex_message(&DEVICE_VERSION_REQUEST),
+    //         [0xf0, 0x43, 0x58, 0x00, 0xf7]
+    //     );
 
-        // test extract data
-        assert_eq!(
-            extract_sysex_message(&[0xf0, 0x43, 0x58, 0x00, 0xf7]).unwrap(),
-            DEVICE_VERSION_REQUEST
-        );
-        assert!(extract_sysex_message(&[]).is_err());
-        assert!(extract_sysex_message(&[0x00, 0x43, 0x58, 0x00, 0xf7]).is_err());
-        assert!(extract_sysex_message(&[0xf0, 0x43, 0x58, 0x00, 0x00]).is_err());
-        assert!(extract_sysex_message(&[0xf0, 0xf7]).is_err());
-    }
+    //     // test extract data
+    //     assert_eq!(
+    //         extract_sysex_message(&[0xf0, 0x43, 0x58, 0x00, 0xf7]).unwrap(),
+    //         DEVICE_VERSION_REQUEST
+    //     );
+    //     assert!(extract_sysex_message(&[]).is_err());
+    //     assert!(extract_sysex_message(&[0x00, 0x43, 0x58, 0x00, 0xf7]).is_err());
+    //     assert!(extract_sysex_message(&[0xf0, 0x43, 0x58, 0x00, 0x00]).is_err());
+    //     assert!(extract_sysex_message(&[0xf0, 0xf7]).is_err());
+    // }
 }

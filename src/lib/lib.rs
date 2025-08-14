@@ -5,6 +5,7 @@ pub mod devices;
 // pub mod effects;
 pub mod poc;
 pub mod midi;
+pub mod nux_sys_ex_commands;
 // pub mod presets;
 pub mod string;
 

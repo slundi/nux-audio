@@ -11,10 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 // NUX Device definitions and mappings
-use crate::{
-    poc::{Effect, MidiCommand, Preset},
-    SYSEX_END, SYSEX_START,
-};
+use crate::{poc::{Effect, MidiCommand, Preset}, SYSEX_END, SYSEX_START};
 
 pub const NUX_MANUFACTURER_ID: [u8; 3] = [0x00, 0x21, 0x21];
 
@@ -23,6 +20,7 @@ pub const MIGHTY_PLUG_DEVICE_ID: u8 = 0x01;
 pub const MIGHTY_PLUG_PRO_DEVICE_ID: u8 = 0x02;
 pub const MIGHTY_AIR_DEVICE_ID: u8 = 0x03;
 pub const MIGHTY_SPACE_DEVICE_ID: u8 = 0x04;
+// pub const MG30_DEVICE_ID: u8 = ; // [0xf0, 0x43, 0x58, 0x10],
 
 // Base implementation for common NUX device functionality
 #[derive(Debug, Clone)]
@@ -304,6 +302,45 @@ impl DeviceDetector {
             DeviceModel::Mg30 => todo!(),
             DeviceModel::Unknown(_) => None,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NuxDevice2 {
+    pub name: String,
+    pub id: u8,
+    // pub code: String,
+    /// Available preset slots
+    pub preset_count: u8,
+    // pub form_factor: FormFactor,
+    /// Used to search MIDI port name and detect the device, examples: `NUX MG-30`, `NUX NMP-03`
+    pub find_start: Vec<String>,
+    // Merge with IrResolution with a "None" value?
+    pub hackable_ir: bool,
+    /// Samples and bits enum
+    // pub ir_resolution: IrResolution,
+    pub fake_master_volume: bool,
+    pub active_channel_retrival: bool,
+    pub amp_slot_index: u8,
+    pub cab_slot_index: u8,
+    pub save_preset_support: bool,
+    pub reorderable_fx_chain: bool,
+    // pub battery_support: bool,
+}
+
+impl NuxDevice2 {
+    // pub fn get_version() {}
+    pub fn get_current_preset(self) {
+        todo!();
+    }
+
+    pub fn set_current_preset(self) {
+        todo!();
+    }
+
+    /// Set preset at the given slot
+    pub fn set_preset_at(self, slot: u8) {
+        todo!();
     }
 }
 
