@@ -1,0 +1,354 @@
+bass: [0 100] # %
+middle: [0 100] # %
+treble: [0 100] # %
+# tempo supported range vary on device
+# style: vary on devices
+# https://github.com/tuntorius/mightier_amp/blob/main/lib/bluetooth/devices/device_data/drumstyles.dart
+
+categories_v1:
+  - name: Metronome
+    styles:
+      - name: M1 - 4/4 4th
+        value: 67
+      - name: M2 - 4/4 8th
+        value: 68
+      - name: M3 - 4/4 16th
+        value: 69
+      - name: M4 - 4/4 2nd Tri
+        value: 70
+      - name: M5 - 4/4 4th Tri
+        value: 71
+      - name: M6 - 4/4 8th Tri
+        value: 72
+      - name: M7 - 3/4 4th
+        value: 73
+      - name: M8 - 3/4 8th
+        value: 74
+  - name: Rock
+    styles:
+      - name: Standard
+        value: 0
+      - name: Swing Rock
+        value: 1
+      - name: Power Beat
+        value: 2
+      - name: Smooth
+        value: 3
+      - name: Mega Drive
+        value: 4
+      - name: Hard Rock
+        value: 5
+      - name: Boogie
+        value: 6
+  - name: Country
+    styles:
+      - name: Walk Line
+        value: 7
+      - name: Blue Grass
+        value: 8
+      - name: Country
+        value: 9
+      - name: Waltz
+        value: 10
+      - name: Train
+        value: 11
+      - name: Country Rock
+        value: 12
+      - name: Slowly
+        value: 13
+  - name: Blues
+    styles:
+      - name: Slow Blues
+        value: 14
+      - name: Chicago
+        value: 15
+      - name: R&B
+        value: 16
+      - name: Blues Rock
+        value: 17
+      - name: Road Train
+        value: 18
+      - name: Shuffle
+        value: 19
+  - name: Metal
+    styles:
+      - name: 2X Bass
+        value: 20
+      - name: Close Beat
+        value: 21
+      - name: Heavy Bass
+        value: 22
+      - name: Fast
+        value: 23
+      - name: Holy Case
+        value: 24
+      - name: Open Hat
+        value: 25
+      - name: Epic
+        value: 26
+  - name: Funk
+    styles:
+      - name: Bounce
+        value: 27
+      - name: East Coast
+        value: 28
+      - name: New Mann
+        value: 29
+      - name: R&B Funk
+        value: 30
+      - name: 80s Funk
+        value: 31
+      - name: Soul
+        value: 32
+      - name: Uncle Jam
+        value: 33
+  - name: Jazz
+    styles:
+      - name: Blues Jazz
+        value: 34
+      - name: Classic 1
+        value: 35
+      - name: Classic 2
+        value: 36
+      - name: Easy Jazz
+        value: 37
+      - name: Fast
+        value: 38
+      - name: Walking
+        value: 39
+      - name: Smooth
+        value: 40
+  - name: Ballad
+    styles:
+      - name: Bluesy
+        value: 41
+      - name: Grooves
+        value: 42
+      - name: Ballad Rock
+        value: 43
+      - name: Slow Rock
+        value: 44
+      - name: Tutorial
+        value: 45
+      - name: R&B Ballad
+        value: 46
+      - name: Gospel
+        value: 47
+  - name: Pop
+    styles:
+      - name: Beach Side
+        value: 48
+      - name: Big City
+        value: 49
+      - name: Funky Pop
+        value: 50
+      - name: Modern
+        value: 51
+      - name: School Pop
+        value: 52
+      - name: Motown
+        value: 53
+      - name: Resistor
+        value: 54
+  - name: Reggae
+    styles:
+      - name: Sheriff
+        value: 55
+      - name: Santeria
+        value: 56
+      - name: Reggae 3
+        value: 57
+      - name: Reggae 4
+        value: 58
+      - name: Reggae 5
+        value: 59
+      - name: Reggae 6
+        value: 60
+      - name: Reggae 7
+        value: 61
+  - name: Electronic
+    styles:
+      - name: Electronic 1
+        value: 62
+      - name: Electronic 2
+        value: 63
+      - name: Electronic 3
+        value: 64
+      - name: Elec-EDM
+        value: 65
+      - name: Elec-Tech
+        value: 66
+
+categories_v2:
+  - name: Metronome
+    styles:
+      - name: M1 - 4/4 4th
+        value: 0
+      - name: M2 - 4/4 8th
+        value: 1
+      - name: M3 - 4/4 16th
+        values: 2
+      - name: M4 - 4/4 2nd Tri
+        values: 3
+      - name: M5 - 4/4 4th Tri
+        values: 4
+      - name: M6 - 4/4 8th Tri
+        values: 5
+      - name: M7 - 3/4 4th
+        values: 6
+      - name: M8 - 3/4 8th
+        values: 7
+  - name: Rock
+    styles:
+      - name: Standard
+        value: 8
+      - name: Swing Rock
+        value: 9
+      - name: Power Beat
+        value: 10
+      - name: Smooth
+        value: 11
+      - name: Mega Drive
+        value: 12
+      - name: Hard Rock
+        value: 13
+      - name: Boogie
+        value: 14
+  - name: Country
+    styles:
+      - name: Walk Line
+        value: 15
+      - name: Blue Grass
+        value: 16
+      - name: Country
+        value: 17
+      - name: Waltz
+        value: 18
+      - name: Train
+        value: 19
+      - name: Country Rock
+        value: 20
+      - name: Slowly
+        value: 21
+  - name: Blues
+    styles:
+      - name: Slow Blues
+        value: 22
+      - name: Chicago
+        value: 23
+      - name: R&B
+        value: 24
+      - name: Blues Rock
+        value: 25
+      - name: Road Train
+        value: 26
+      - name: Shuffle
+        value: 27
+  - name: Metal
+    styles:
+      - name: 2X Bass
+        value: 28
+      - name: Close Beat
+        value: 29
+      - name: Heavy Bass
+        value: 30
+      - name: Fast
+        value: 31
+      - name: Holy Case
+        value: 32
+      - name: Open Hat
+        value: 33
+      - name: Epic
+        value: 34
+  - name: Funk
+    styles:
+      - name: Bounce
+        value: 35
+      - name: East Coast
+        value: 36
+      - name: New Mann
+        value: 37
+      - name: R&B Funk
+        value: 38
+      - name: 80s Funk
+        value: 39
+      - name: Soul
+        value: 40
+      - name: Uncle Jam
+        value: 41
+  - name: Jazz
+    styles:
+      - name: Blues Jazz
+        value: 42
+      - name: Classic 1
+        value: 43
+      - name: Classic 2
+        value: 44
+      - name: Easy Jazz
+        value: 45
+      - name: Fast
+        value: 46
+      - name: Walking
+        value: 47
+      - name: Smooth
+        value: 48
+  - name: Ballad
+    styles:
+      - name: Bluesy
+        value: 49
+      - name: Grooves
+        value: 50
+      - name: Ballad Rock
+        value: 51
+      - name: Slow Rock
+        value: 52
+      - name: Tutorial
+        value: 53
+      - name: R&B Ballad
+        value: 54
+      - name: Gospel
+        value: 55
+  - name: Pop
+    styles:
+      - name: Beach Side
+        value: 56
+      - name: Big City
+        value: 57
+      - name: Funky Pop
+        value: 58
+      - name: Modern
+        value: 59
+      - name: School Pop
+        value: 60
+      - name: Motown
+        value: 61
+      - name: Resistor
+        value: 62
+  - name: Reggae
+    styles:
+      - name: Sheriff
+        value: 63
+      - name: Santeria
+        value: 64
+      - name: Reggae 3
+        value: 65
+      - name: Reggae 4
+        value: 66
+      - name: Reggae 5
+        value: 67
+      - name: Reggae 6
+        value: 68
+      - name: Reggae 7
+        value: 69
+  - name: Electronic
+    styles:
+      - name: Electronic 1
+        value: 70
+      - name: Electronic 2
+        value: 71
+      - name: Electronic 3
+        value: 72
+      - name: Elec-EDM
+        value: 73
+      - name: Elec-Tech
+        value: 74
