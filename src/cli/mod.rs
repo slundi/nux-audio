@@ -1,8 +1,8 @@
 mod command_devices;
 
+use crate::midi::MidiManager;
 use clap::{Args, Parser, Subcommand};
 use command_devices::list as list_devices;
-use nux_audio::MidiManager;
 use std::{
     io::{stdin, stdout, Write},
     path::PathBuf,
@@ -92,9 +92,7 @@ impl Cli {
         };
     }
 
-    fn get_manager() {
-
-    }
+    fn get_manager() {}
 
     fn send_raw(self, data: &[u8]) {
         println!("Sending message: {:?} (replace with formated string", data);

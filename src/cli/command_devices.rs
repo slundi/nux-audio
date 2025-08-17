@@ -1,4 +1,4 @@
-use nux_audio::MidiManager;
+use crate::midi::MidiManager;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Port {
