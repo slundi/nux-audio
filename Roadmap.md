@@ -9,7 +9,7 @@
 
 ## Phase 2: Communication Engine
 
-* [~] **SysEx Templating**: `build_sysex_message()` and `send_sysex()` / `send_sysex_raw()` implemented. All known MG-30 request/response byte patterns defined as constants in `nux_sys_ex_commands`. A dynamic template system driven by `devices.yaml` is not yet built.
+* [x] **SysEx Templating**: `build_sysex_message()` and `send_sysex()` / `send_sysex_raw()` implemented. All known MG-30 request/response byte patterns defined as constants. Parameterized typed builders for MG-30 (`mg30_request_preset`, `mg30_change_preset`, `mg30_save_preset`, `mg30_looper_control`, `mg30_set_effect_order`) and Mighty series (`mighty_change_preset`). `SysExTemplate` + `TemplateSlot` system for runtime parameter substitution; predefined templates in `nux_sys_ex_commands::templates` mirror each typed builder and are verified by tests.
 * [~] **Real-time Control (CC)**: All CC numbers mapped in `KnobDef.ctrl` for every effect slot and model. A CC send function is **not yet implemented** — the data model is ready, the wire is not.
 * [~] **Asynchronous handling**: `tokio` in `Cargo.toml`, `Cli::process()` is async. MIDI callbacks are synchronous; response routing and async message dispatch are not yet wired.
 

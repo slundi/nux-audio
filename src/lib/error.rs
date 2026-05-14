@@ -22,7 +22,17 @@ pub enum NuxAudioError {
     #[error("SysEx message too short")]
     SysExTooShort,
 
-    // ── Scene control ─────────────────────────────────────────────────────────
-    #[error("invalid scene number {0}: must be between 1 and 3")]
+    // ── Scene / preset / device validation ───────────────────────────────────
+    #[error("invalid scene number {0}")]
     InvalidSceneNumber(u8),
+
+    #[error("preset index {0} is out of range for this device")]
+    InvalidPresetIndex(u8),
+
+    #[error("device ID 0x{0:02X} is not valid for this command")]
+    InvalidDeviceId(u8),
+
+    // ── SysEx template ────────────────────────────────────────────────────────
+    #[error("missing SysEx template parameter '{0}'")]
+    MissingTemplateParam(&'static str),
 }
