@@ -105,7 +105,7 @@ impl Cli {
             Commands::Raw {
                 ref data,
                 decimal,
-                with_prefixes,
+                with_prefixes: _,
             } => {
                 // TODO: prepare string to be sent
                 let prepared = data.join(" ");
@@ -123,8 +123,6 @@ impl Cli {
             }
         };
     }
-
-    fn get_manager() {}
 
     fn send_raw(self, data: &[u8]) {
         println!("Sending message: {:?} (replace with formated string", data);

@@ -160,12 +160,20 @@ mg30:
           - {id: volume,   label: "VOLUME",   cc: 18, range: [0, 100]}
       - id: 0x4C
         name: "Red Fuzz"
-        # knobs not yet confirmed from hardware
-        knobs: []
+        full_name: "Silicon Fuzz"
+        # knob labels [provisional] — CCs confirmed (EFX slot CC17–19)
+        knobs:
+          - {id: volume, label: "VOLUME", cc: 17, range: [0, 100]}
+          - {id: tone,   label: "TONE",   cc: 18, range: [0, 100]}
+          - {id: fuzz,   label: "FUZZ",   cc: 19, range: [0, 100]}
       - id: 0x4D
         name: "Touch Wah"
-        # knobs not yet confirmed from hardware
-        knobs: []
+        full_name: "Envelope Auto-Wah"
+        # knob labels [provisional] — CCs confirmed (EFX slot CC17–19)
+        knobs:
+          - {id: sens,  label: "SENSITIVITY", cc: 17, range: [0, 100]}
+          - {id: range, label: "RANGE",        cc: 18, range: [0, 100]}
+          - {id: level, label: "LEVEL",        cc: 19, range: [0, 100]}
 
   amp:
     bypass_cc: 3

@@ -261,4 +261,154 @@ mod tests {
         }
         assert!(EffectCategory::from_u8(12).is_none());
     }
+
+    // ── Catalog validation ────────────────────────────────────────────────────
+
+    fn total_model_count() -> usize {
+        wah::MODELS.len()
+            + compression::MODELS.len()
+            + efx::MODELS.len()
+            + amp::MODELS.len()
+            + equalizer::MODELS.len()
+            + gate::MODELS.len()
+            + modulation::MODELS.len()
+            + delay::MODELS.len()
+            + reverb::MODELS.len()
+            + ir::MODELS.len()
+    }
+
+    #[test]
+    fn test_catalog_has_100_plus_models() {
+        let count = total_model_count();
+        assert!(
+            count >= 100,
+            "expected ≥100 models across all slots, got {count}"
+        );
+    }
+
+    /// Each model's stored id must equal its HashMap key.
+    #[test]
+    fn test_catalog_ids_match_keys() {
+        macro_rules! check {
+            ($map:expr, $slot:literal) => {
+                for (key, opt) in $map.iter() {
+                    assert_eq!(
+                        *key, opt.id,
+                        "{} model key 0x{key:02X} has mismatched id 0x{:02X}",
+                        $slot, opt.id
+                    );
+                }
+            };
+        }
+        check!(wah::MODELS, "Wah");
+        check!(compression::MODELS, "Comp");
+        check!(efx::MODELS, "Efx");
+        check!(amp::MODELS, "Amp");
+        check!(equalizer::MODELS, "Eq");
+        check!(gate::MODELS, "Gate");
+        check!(modulation::MODELS, "Mod");
+        check!(delay::MODELS, "Delay");
+        check!(reverb::MODELS, "Reverb");
+        check!(ir::MODELS, "Ir");
+    }
+
+    /// All EFX models (including newly-filled 0x4C/0x4D) must have knobs defined.
+    #[test]
+    fn test_efx_all_models_have_knobs() {
+        for (id, model) in efx::MODELS.iter() {
+            assert!(
+                !model.knobs.is_empty(),
+                "EFX model 0x{id:02X} ({}) has no knobs",
+                model.title
+            );
+        }
+    }
+
+    /// Knob CC numbers for each slot must fall within the slot's documented range.
+    ///
+    /// Ranges from MIDI_CC_assignements.md:
+    ///   Wah CC11–12 | Comp CC13–15,90 | Efx CC17–21 | Amp CC22–29
+    ///   Eq CC30–41  | Gate CC42–45    | Mod CC46–51  | Delay CC52–59
+    ///   Reverb CC60–63 | Ir CC64–69  | Vol CC70–72
+    fn assert_ccs_in_range(
+        models: &std::collections::HashMap<u8, EffectOption<'static>>,
+        slot: &str,
+        valid: &[u8],
+    ) {
+        for (id, opt) in models {
+            for knob in &opt.knobs {
+                assert!(
+                    valid.contains(&knob.ctrl),
+                    "{slot} model 0x{id:02X} ({}) knob '{}' has unexpected CC {}",
+                    opt.title,
+                    knob.id,
+                    knob.ctrl
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_wah_knob_ccs_in_range() {
+        assert_ccs_in_range(&wah::MODELS, "Wah", &[11, 12]);
+    }
+
+    #[test]
+    fn test_comp_knob_ccs_in_range() {
+        assert_ccs_in_range(&compression::MODELS, "Comp", &[13, 14, 15, 90]);
+    }
+
+    #[test]
+    fn test_efx_knob_ccs_in_range() {
+        assert_ccs_in_range(&efx::MODELS, "Efx", &[17, 18, 19, 20, 21]);
+    }
+
+    #[test]
+    fn test_amp_knob_ccs_in_range() {
+        assert_ccs_in_range(&amp::MODELS, "Amp", &[22, 23, 24, 25, 26, 27, 28, 29]);
+    }
+
+    #[test]
+    fn test_eq_knob_ccs_in_range() {
+        let eq_ccs: Vec<u8> = (30..=41).collect();
+        assert_ccs_in_range(&equalizer::MODELS, "Eq", &eq_ccs);
+    }
+
+    #[test]
+    fn test_gate_knob_ccs_in_range() {
+        assert_ccs_in_range(&gate::MODELS, "Gate", &[42, 43, 44, 45]);
+    }
+
+    #[test]
+    fn test_mod_knob_ccs_in_range() {
+        let mod_ccs: Vec<u8> = (46..=51).collect();
+        assert_ccs_in_range(&modulation::MODELS, "Mod", &mod_ccs);
+    }
+
+    #[test]
+    fn test_delay_knob_ccs_in_range() {
+        let delay_ccs: Vec<u8> = (52..=59).collect();
+        assert_ccs_in_range(&delay::MODELS, "Delay", &delay_ccs);
+    }
+
+    #[test]
+    fn test_reverb_knob_ccs_in_range() {
+        let reverb_ccs: Vec<u8> = (60..=63).collect();
+        assert_ccs_in_range(&reverb::MODELS, "Reverb", &reverb_ccs);
+    }
+
+    #[test]
+    fn test_ir_knob_ccs_in_range() {
+        let ir_ccs: Vec<u8> = (64..=69).collect();
+        assert_ccs_in_range(&ir::MODELS, "Ir", &ir_ccs);
+    }
+
+    /// as_str() must be non-empty and stable for every variant.
+    #[test]
+    fn test_as_str_non_empty() {
+        for v in 0u8..=11 {
+            let cat = EffectCategory::from_u8(v).unwrap();
+            assert!(!cat.as_str().is_empty());
+        }
+    }
 }

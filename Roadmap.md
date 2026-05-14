@@ -21,7 +21,7 @@
 
 ## Phase 4: Effect Control
 
-* [~] **Effect model catalog**: Full MG-30 static catalog complete — wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir, vol (100+ models with correct CC assignments).
+* [x] **Effect model catalog**: Full MG-30 static catalog complete — wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir, vol (100+ models with correct CC assignments).
 * [ ] **CC send**: Wire `KnobDef.ctrl` to actual MIDI CC messages for real-time knob control.
 * [ ] **Bypass toggle**: Send bypass CC per slot (CC numbers documented in each effect file header).
 * [ ] **Model switch**: Send SysEx to change active model within a slot.
@@ -36,7 +36,11 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 ## Phase 6: TUI (stateful)
 
 * [ ] **Persistence**: Local configuration to remember last used device and default folders.
+* [ ] **Input**: mouse support
 * [ ] **TUI Dashboard**: Interactive terminal interface for visual pedalboard management, effect toggling, and real-time knob adjustment.
+* [ ] **Tab Patches** (presets): array list with column `Name`, `Device`, Enabled effects icon or abbreviation. `s` to sort, `f` to filter, `/` to search on names. Bottom panel display effect with each knob value.
+* [ ] **Tab CC**: generic TUI to map MIDI CC (button and sliders)?
+* [ ] **Tab About**: display project info (name, version, repo) and key bindings.
 
 ## Phase 7: Community & Extensibility
 

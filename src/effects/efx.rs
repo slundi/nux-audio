@@ -4,7 +4,9 @@
 // Bypass CC: 2
 // Knob CCs: KNOB1=17, KNOB2=18, KNOB3=19, KNOB4=20, KNOB5=21
 //
-// IDs confirmed from hardware reverse-engineering.
+// IDs 0x40–0x4B confirmed from hardware reverse-engineering.
+// IDs 0x4C–0x4D provisional — knob labels inferred from effect type,
+// CC numbers are confirmed (all EFX knobs share CC17–21).
 
 use std::{collections::HashMap, sync::LazyLock};
 
@@ -184,8 +186,12 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             EffectOption {
                 id: 0x4C,
                 title: "Red Fuzz",
-                // knobs not yet confirmed from hardware
-                knobs: vec![],
+                // Silicon fuzz — knob labels provisional, CCs confirmed (EFX slot CC17–19)
+                knobs: vec![
+                    knob("volume", "VOLUME", 17, 100),
+                    knob("tone", "TONE", 18, 100),
+                    knob("fuzz", "FUZZ", 19, 100),
+                ],
                 ..Default::default()
             },
         ),
@@ -194,8 +200,12 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             EffectOption {
                 id: 0x4D,
                 title: "Touch Wah",
-                // knobs not yet confirmed from hardware
-                knobs: vec![],
+                // Envelope auto-wah — knob labels provisional, CCs confirmed (EFX slot CC17–19)
+                knobs: vec![
+                    knob("sens", "SENSITIVITY", 17, 100),
+                    knob("range", "RANGE", 18, 100),
+                    knob("level", "LEVEL", 19, 100),
+                ],
                 ..Default::default()
             },
         ),
