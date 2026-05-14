@@ -1,472 +1,671 @@
-# Common effects mapping for all devices
-common_effects_mapping:
-  # Effets présents dans tous les modèles
-  universal_effects:
-    - amp_model:
-        id_range: [0x00, 0x0F]
-        common_models: ["JZ Clean", "Twin Rvb", "Brit 2203"]
-    - delay:
-        id_range: [0x20, 0x2F]
-        common_types: ["Digital Delay"]
-    - reverb:
-        id_range: [0x30, 0x3F]
-        common_types: ["Hall", "Room"]
-    - eq:
-        bass_cc: 2
-        middle_cc: 3
-        treble_cc: 4
+# Effects catalog for Nux audio devices
+#
+# Source of truth for effect models, knob parameters, and CC assignments.
+# CC numbers come from MIDI_CC_assignements.md (MG-30 protocol).
+# Model IDs marked [confirmed] are from reverse engineering of the device protocol.
+# Model IDs marked [provisional] are inferred from sequential ordering and need
+# hardware verification before being used in SysEx messages.
+#
+# Structure: one top-level key per device family, each containing effect slots
+# in signal chain order with their models and knob definitions.
 
-  pro_family_exclusive:
-    - secret_amps:
-        id_range: [0x08, 0x0F]
-        models: ["Class A15", "Vibro King", "Budda", "Brit Blues", "Match D30", "Brit 2000", "Uber HiGain"]
-    - advanced_modulation:
-        id_range: [0x15, 0x19] 
-        types: ["Tremolo", "Octave", "Ring Mod"]
-    - cabinet_simulation:
-        id: 0x60
-        cc_range: [80, 85]
+# ---------------------------------------------------------------------------
+# MG-30 Versatile Modeler
+# ---------------------------------------------------------------------------
+mg30:
+  # Fixed signal chain — 11 slots in processing order
+  signal_chain: [wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir, vol]
 
-  mg_family_exclusive:  # TODO:
-    - looper:
-        id: 0x70
-        cc_range: [110, 115]
-        max_time: 60  # seconds
-    - expression_pedal:
-        cc_range: [120, 127]
-    - scene_control:
-        cc_range: [100, 103]
+  wah:
+    bypass_cc: 0
+    models:
+      # IDs provisional — inferred from on_byte pattern (on_byte = 2 * id) in wah.rs
+      - id: 0x01
+        name: "Clyde"
+        full_name: "Clyde (60s Trumpet Sound)"
+        knobs: []
+      - id: 0x02
+        name: "Cry BB"
+        full_name: "Cry Baby"
+        knobs: []
+      - id: 0x03
+        name: "V847"
+        full_name: "Vox V847"
+        knobs: []
+      - id: 0x04
+        name: "Horse Wah"
+        full_name: "Morley Bad Horsie Wah"
+        knobs:
+          - {id: contour, label: "CONTOUR", cc: 11, range: [0, 100]}
+          - {id: range,   label: "RANGE",   cc: 12, range: [0, 5]}
+      - id: 0x05
+        name: "Octave Shift"
+        full_name: "Digitech Whammy"
+        knobs:
+          - {id: direction, label: "UP/DOWN", cc: 12, range: [0, 1]}
 
-effects:
-  # Amplificateurs
-  amp_models:
-    - id: 0x00
-      name: "Twin Rvb"
-      category: "amp"
-      parameters:
-        - name: "gain"
-          cc: 1
-          range: [0, 100]
-          default: 50
-        - name: "bass"
-          cc: 2
-          range: [0, 100]
-          default: 50
-        - name: "middle"
-          cc: 3
-          range: [0, 100]
-          default: 50
-        - name: "treble"
-          cc: 4
-          range: [0, 100]
-          default: 50
-        - name: "presence"
-          cc: 5
-          range: [0, 100]
-          default: 50
-        - name: "volume"
-          cc: 7
-          range: [0, 100]
-          default: 50
-          
-    - id: 0x01
-      name: "JZ Clean"
-      category: "amp"
-      parameters:
-        - name: "gain"
-          cc: 1
-          range: [0, 100]
-          default: 30
-        - name: "bass"
-          cc: 2
-          range: [0, 100]
-          default: 50
-        - name: "middle"
-          cc: 3
-          range: [0, 100]
-          default: 50
-        - name: "treble"
-          cc: 4
-          range: [0, 100]
-          default: 60
-        - name: "presence"
-          cc: 5
-          range: [0, 100]
-          default: 50
-        - name: "volume"
-          cc: 7
-          range: [0, 100]
-          default: 50
-          
-    - id: 0x02
-      name: "Class A15"
-      category: "amp"
-      secret: true
-      parameters:
-        - name: "gain"
-          cc: 1
-          range: [0, 100]
-          default: 60
-        - name: "bass"
-          cc: 2
-          range: [0, 100]
-          default: 50
-        - name: "middle"
-          cc: 3
-          range: [0, 100]
-          default: 50
-        - name: "treble"
-          cc: 4
-          range: [0, 100]
-          default: 50
-        - name: "presence"
-          cc: 5
-          range: [0, 100]
-          default: 50
-        - name: "volume"
-          cc: 7
-          range: [0, 100]
-          default: 50
+  comp:
+    bypass_cc: 1
+    models:
+      # IDs provisional
+      - id: 0x00
+        name: "Rose Comp"
+        full_name: "Ross Compressor"
+        knobs:
+          - {id: sustain, label: "SUSTAIN", cc: 13, range: [0, 100]}
+          - {id: level,   label: "LEVEL",   cc: 14, range: [0, 100]}
+      - id: 0x01
+        name: "K Comp"
+        full_name: "Keely Compressor"
+        knobs:
+          - {id: sustain,  label: "SUSTAIN",  cc: 13, range: [0, 100]}
+          - {id: level,    label: "LEVEL",    cc: 14, range: [0, 100]}
+          - {id: clipping, label: "CLIPPING", cc: 15, range: [0, 100]}
+      - id: 0x02
+        name: "Studio Comp"
+        full_name: "Studio Compressor"
+        knobs:
+          - {id: threshold, label: "THRESHOLD", cc: 13, range: [0, 100]}
+          - {id: ratio,     label: "RATIO",     cc: 14, range: [0, 100]}
+          - {id: gain,      label: "GAIN",      cc: 15, range: [0, 100]}
+          - {id: release,   label: "RELEASE",   cc: 90, range: [0, 100]}
 
-  # Effets de modulation
-  modulation_effects:
-    - id: 0x10
-      name: "Chorus"
-      category: "modulation"
-      parameters:
-        - name: "rate"
-          cc: 10
-          range: [0, 100]
-          default: 50
-        - name: "depth"
-          cc: 11
-          range: [0, 100]
-          default: 50
-        - name: "mix"
-          cc: 12
-          range: [0, 100]
-          default: 50
-        - name: "bypass"
-          cc: 20
-          range: [0, 1]
-          default: 0
-          
-    - id: 0x11
-      name: "Flanger"
-      category: "modulation"
-      parameters:
-        - name: "rate"
-          cc: 10
-          range: [0, 100]
-          default: 40
-        - name: "depth"
-          cc: 11
-          range: [0, 100]
-          default: 60
-        - name: "feedback"
-          cc: 13
-          range: [0, 100]
-          default: 30
-        - name: "mix"
-          cc: 12
-          range: [0, 100]
-          default: 50
-        - name: "bypass"
-          cc: 20
-          range: [0, 1]
-          default: 0
-          
-    - id: 0x12
-      name: "Phaser"
-      category: "modulation"
-      parameters:
-        - name: "rate"
-          cc: 10
-          range: [0, 100]
-          default: 50
-        - name: "depth"
-          cc: 11
-          range: [0, 100]
-          default: 70
-        - name: "feedback"
-          cc: 13
-          range: [0, 100]
-          default: 40
-        - name: "bypass"
-          cc: 20
-          range: [0, 1]
-          default: 0
+  efx:
+    bypass_cc: 2
+    models:
+      # IDs confirmed from reverse engineering
+      - id: 0x40
+        name: "Dist+"
+        full_name: "MXR Distortion+"
+        knobs:
+          - {id: output, label: "OUTPUT",      cc: 17, range: [0, 100]}
+          - {id: sens,   label: "SENSITIVITY", cc: 18, range: [0, 100]}
+      - id: 0x41
+        name: "RC Boost"
+        full_name: "Xotic RC Booster"
+        knobs:
+          - {id: gain,   label: "GAIN",   cc: 17, range: [0, 100]}
+          - {id: vol,    label: "VOL",    cc: 18, range: [0, 100]}
+          - {id: bass,   label: "BASS",   cc: 19, range: [0, 100]}
+          - {id: treble, label: "TREBLE", cc: 20, range: [0, 100]}
+      - id: 0x42
+        name: "AC Boost"
+        full_name: "Xotic AC Booster"
+        knobs:
+          - {id: gain,   label: "GAIN",   cc: 17, range: [0, 100]}
+          - {id: vol,    label: "VOL",    cc: 18, range: [0, 100]}
+          - {id: bass,   label: "BASS",   cc: 19, range: [0, 100]}
+          - {id: treble, label: "TREBLE", cc: 20, range: [0, 100]}
+      - id: 0x43
+        name: "Dist One"
+        full_name: "Boss DS-1 Distortion"
+        knobs:
+          - {id: level, label: "LEVEL", cc: 17, range: [0, 100]}
+          - {id: tone,  label: "TONE",  cc: 18, range: [0, 100]}
+          - {id: drive, label: "DRIVE", cc: 19, range: [0, 100]}
+      - id: 0x44
+        name: "T Scream"
+        full_name: "Ibanez Tube Screamer"
+        knobs:
+          - {id: drive, label: "DRIVE", cc: 17, range: [0, 100]}
+          - {id: tone,  label: "TONE",  cc: 18, range: [0, 100]}
+          - {id: level, label: "LEVEL", cc: 19, range: [0, 100]}
+      - id: 0x45
+        name: "Blues Drv"
+        full_name: "Boss Blues Driver"
+        knobs:
+          - {id: level, label: "LEVEL", cc: 17, range: [0, 100]}
+          - {id: tone,  label: "TONE",  cc: 18, range: [0, 100]}
+          - {id: gain,  label: "GAIN",  cc: 19, range: [0, 100]}
+      - id: 0x46
+        name: "Morning Drv"
+        full_name: "JHS Morning Glory"
+        knobs:
+          - {id: volume, label: "VOLUME", cc: 17, range: [0, 100]}
+          - {id: drive,  label: "DRIVE",  cc: 18, range: [0, 100]}
+          - {id: tone,   label: "TONE",   cc: 19, range: [0, 100]}
+      - id: 0x47
+        name: "EAT Dist"
+        full_name: "ProCo RAT"
+        knobs:
+          - {id: distortion, label: "DISTORTION", cc: 17, range: [0, 100]}
+          - {id: filter,     label: "FILTER",     cc: 18, range: [0, 100]}
+          - {id: volume,     label: "VOLUME",     cc: 19, range: [0, 100]}
+      - id: 0x48
+        name: "Red Dirt"
+        full_name: "Keely Red Dirt"
+        knobs:
+          - {id: drive, label: "DRIVE", cc: 17, range: [0, 100]}
+          - {id: tone,  label: "TONE",  cc: 18, range: [0, 100]}
+          - {id: level, label: "LEVEL", cc: 19, range: [0, 100]}
+      - id: 0x49
+        name: "Crunch"
+        full_name: "JHS Angry Charlie"
+        knobs:
+          - {id: volume, label: "VOLUME", cc: 17, range: [0, 100]}
+          - {id: tone,   label: "TONE",   cc: 18, range: [0, 100]}
+          - {id: gain,   label: "GAIN",   cc: 19, range: [0, 100]}
+      - id: 0x4A
+        name: "Muff Fuzz"
+        full_name: "EHX Big Muff Pi"
+        knobs:
+          - {id: volume,  label: "VOLUME",  cc: 17, range: [0, 100]}
+          - {id: tone,    label: "TONE",    cc: 18, range: [0, 100]}
+          - {id: sustain, label: "SUSTAIN", cc: 19, range: [0, 100]}
+      - id: 0x4B
+        name: "Katana"
+        full_name: "Keely Katana Clean Boost"
+        knobs:
+          - {id: boost_sw, label: "BOOST SW", cc: 17, range: [0, 1]}
+          - {id: volume,   label: "VOLUME",   cc: 18, range: [0, 100]}
+      - id: 0x4C
+        name: "Red Fuzz"
+        # knobs not yet confirmed from hardware
+        knobs: []
+      - id: 0x4D
+        name: "Touch Wah"
+        # knobs not yet confirmed from hardware
+        knobs: []
 
-  # Effets de delay
-  delay_effects:
-    - id: 0x20
-      name: "Digital Delay"
-      category: "delay"
-      parameters:
-        - name: "time"
-          cc: 30
-          range: [0, 2000]  # en ms
-          default: 300
-        - name: "feedback"
-          cc: 31
-          range: [0, 100]
-          default: 30
-        - name: "mix"
-          cc: 32
-          range: [0, 100]
-          default: 40
-        - name: "bypass"
-          cc: 35
-          range: [0, 1]
-          default: 0
-          
-    - id: 0x21
-      name: "Analog Delay"
-      category: "delay"
-      parameters:
-        - name: "time"
-          cc: 30
-          range: [0, 1000]
-          default: 400
-        - name: "feedback"
-          cc: 31
-          range: [0, 100]
-          default: 40
-        - name: "mix"
-          cc: 32
-          range: [0, 100]
-          default: 35
-        - name: "tone"
-          cc: 33
-          range: [0, 100]
-          default: 60
-        - name: "bypass"
-          cc: 35
-          range: [0, 1]
-          default: 0
+  amp:
+    bypass_cc: 3
+    # All amp models share the same 8 CC slots in the same positions.
+    # Not all amps use all 8 slots — see knob_layout per model.
+    # CC22=GAIN, CC23=MASTER, CC24=BASS/CUT, CC25=MIDDLE,
+    # CC26=TREBLE, CC27=PRESENCE/CUT, CC28=BIAS/BRIGHT_SW, CC29=LEVEL
+    knob_ccs:
+      gain:      22
+      master:    23
+      bass:      24
+      cut:       24  # same CC as bass, different label on Vox/Matchless/Budda/MrZ
+      middle:    25
+      mid_freq:  25  # same CC, used on bass amps
+      treble:    26
+      presence:  27
+      tone:      27  # same CC, used on Tweedy
+      bright_sw: 28
+      bias:      28  # same CC, different function per amp
+      level:     29
+    models:
+      # IDs provisional — sequential 0x00..0x1D matching order in amp.rs
+      - id: 0x00
+        name: "Jazz Clean"
+        full_name: "Roland JC-120"
+        category: clean
+        knob_layout: [gain, master, bass, middle, treble, bright_sw, level]
+      - id: 0x01
+        name: "Deluxe Rvb"
+        full_name: "1964 Fender Deluxe Reverb"
+        category: clean
+        knob_layout: [gain, master, bass, middle, treble, bias, level]
+      - id: 0x02
+        name: "Bass Mate"
+        full_name: "1959 Fender Bassman"
+        category: clean
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x03
+        name: "Tweedy"
+        full_name: "1957 Fender Tweed Deluxe"
+        category: clean
+        knob_layout: [gain, tone, master, level]
+      - id: 0x04
+        name: "Twin Rvb"
+        full_name: "1965 Fender Twin Reverb"
+        category: clean
+        knob_layout: [gain, master, bass, middle, treble, bright_sw, bias, level]
+      - id: 0x05
+        name: "Hiwire"
+        full_name: "1969 HIWATT"
+        category: crunch
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x06
+        name: "Cali Crunch"
+        full_name: "1978 Mesa Boogie MK1"
+        category: crunch
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x07
+        name: "Class A 15"
+        full_name: "Vox AC15"
+        category: clean
+        knob_layout: [gain, master, cut, bass, treble, level]
+      - id: 0x08
+        name: "Class A 30"
+        full_name: "Vox AC30"
+        category: clean
+        knob_layout: [gain, master, cut, bass, treble, level]
+      - id: 0x09
+        name: "Plexi 100W"
+        full_name: "1968 Marshall Plexi 100W"
+        category: crunch
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x0A
+        name: "Plexi 45"
+        full_name: "1967 Marshall Plexi 45W"
+        category: crunch
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x0B
+        name: "Brit 800"
+        full_name: "1977 Marshall JCM800"
+        category: high_gain
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x0C
+        name: "1987X 50W"
+        full_name: "1989 Marshall 1987X 50W"
+        category: crunch
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x0D
+        name: "SLO 100"
+        full_name: "1980 Soldano SLO-100"
+        category: high_gain
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x0E
+        name: "Fireman HBE"
+        full_name: "2005 Friedman HBE"
+        category: high_gain
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x0F
+        name: "Dual Rect"
+        full_name: "1985 Mesa Dual Rectifier"
+        category: high_gain
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x10
+        name: "Die VH4"
+        full_name: "1999 Diezel VH4"
+        category: high_gain
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x11
+        name: "Vibro King"
+        full_name: "1990 Fender Vibro King"
+        category: clean
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x12
+        name: "Budda"
+        full_name: "Budda"
+        category: crunch
+        knob_layout: [gain, master, cut, bass, middle, treble, level]
+      - id: 0x13
+        name: "Mr Z 38"
+        full_name: "2001 Dr Z MAZ-38"
+        category: clean
+        knob_layout: [gain, master, cut, bass, middle, treble, level]
+      - id: 0x14
+        name: "Super Rvb"
+        full_name: "2008 Fender Supersonic"
+        category: clean
+        knob_layout: [gain, master, bass, middle, treble, bright_sw, bias, level]
+      - id: 0x15
+        name: "Brit Blues"
+        full_name: "1967 Marshall JTM45"
+        category: crunch
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x16
+        name: "Match"
+        full_name: "1986 Matchless DC30"
+        category: crunch
+        knob_layout: [gain, master, cut, bass, treble, level]
+      - id: 0x17
+        name: "Brit 2000"
+        full_name: "Marshall JTM2000"
+        category: high_gain
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      - id: 0x18
+        name: "Uber"
+        full_name: "Bogner Uberschall"
+        category: high_gain
+        knob_layout: [gain, master, bass, middle, treble, presence, bias, level]
+      # Bass amps
+      - id: 0x19
+        name: "AGL"
+        full_name: "Aguilar Tone Hammer Amp"
+        category: bass
+        knob_layout: [gain, master, bass, middle, mid_freq, treble, level]
+      - id: 0x1A
+        name: "Bassguy"
+        full_name: "Bassman 100"
+        category: bass
+        knob_layout: [gain, master, bass, middle, treble, presence, level]
+      - id: 0x1B
+        name: "MLD"
+        full_name: "NUX Melvin Lee Davis Amp"
+        category: bass
+        knob_layout: [gain, master, bass, middle, mid_freq, treble, level]
+      # Acoustic amps
+      - id: 0x1C
+        name: "Optima Air"
+        full_name: "NUX Optima Air"
+        category: acoustic
+        knob_layout: [gain, master, bass, middle, treble, level]
+      - id: 0x1D
+        name: "Stageman"
+        full_name: "NUX Stageman Acoustic"
+        category: acoustic
+        knob_layout: [gain, master, bass, middle, treble, level]
 
-  # Effets de reverb
-  reverb_effects:
-    - id: 0x30
-      name: "Hall"
-      category: "reverb"
-      parameters:
-        - name: "size"
-          cc: 40
-          range: [0, 100]
-          default: 70
-        - name: "decay"
-          cc: 41
-          range: [0, 100]
-          default: 60
-        - name: "tone"
-          cc: 42
-          range: [0, 100]
-          default: 50
-        - name: "mix"
-          cc: 43
-          range: [0, 100]
-          default: 30
-        - name: "bypass"
-          cc: 45
-          range: [0, 1]
-          default: 0
-          
-    - id: 0x31
-      name: "Room"
-      category: "reverb"
-      parameters:
-        - name: "size"
-          cc: 40
-          range: [0, 100]
-          default: 50
-        - name: "decay"
-          cc: 41
-          range: [0, 100]
-          default: 40
-        - name: "tone"
-          cc: 42
-          range: [0, 100]
-          default: 60
-        - name: "mix"
-          cc: 43
-          range: [0, 100]
-          default: 25
-        - name: "bypass"
-          cc: 45
-          range: [0, 1]
-          default: 0
-          
-    - id: 0x32
-      name: "Spring"
-      category: "reverb"
-      parameters:
-        - name: "size"
-          cc: 40
-          range: [0, 100]
-          default: 60
-        - name: "decay"
-          cc: 41
-          range: [0, 100]
-          default: 50
-        - name: "tone"
-          cc: 42
-          range: [0, 100]
-          default: 70
-        - name: "mix"
-          cc: 43
-          range: [0, 100]
-          default: 40
-        - name: "bypass"
-          cc: 45
-          range: [0, 1]
-          default: 0
+  eq:
+    bypass_cc: 4
+    models:
+      # IDs provisional
+      - id: 0x00
+        name: "6-Band EQ"
+        full_name: "Boss GE-6"
+        knobs:
+          - {id: hz100,  label: "100Hz",  cc: 30, range: [0, 100]}
+          - {id: hz220,  label: "220Hz",  cc: 31, range: [0, 100]}
+          - {id: hz500,  label: "500Hz",  cc: 32, range: [0, 100]}
+          - {id: khz12,  label: "1.2kHz", cc: 33, range: [0, 100]}
+          - {id: khz26,  label: "2.6kHz", cc: 34, range: [0, 100]}
+          - {id: khz64,  label: "6.4kHz", cc: 35, range: [0, 100]}
+          - {id: level,  label: "LEVEL",  cc: 36, range: [0, 100]}
+      - id: 0x01
+        name: "Align EQ"
+        full_name: "Align EQ"
+        knobs:
+          - {id: hpf,    label: "HPF",    cc: 30, range: [0, 2]}  # 0=50Hz 1=80Hz 2=160Hz
+          - {id: hz110,  label: "110Hz",  cc: 31, range: [0, 100]}
+          - {id: hz340,  label: "340Hz",  cc: 32, range: [0, 100]}
+          - {id: hz660,  label: "660Hz",  cc: 33, range: [0, 100]}
+          - {id: khz13,  label: "1.3kHz", cc: 34, range: [0, 100]}
+          - {id: khz26,  label: "2.6kHz", cc: 35, range: [0, 100]}
+          - {id: khz50,  label: "5.0kHz", cc: 36, range: [0, 100]}
+          - {id: volume, label: "VOLUME", cc: 37, range: [0, 100]}
+      - id: 0x02
+        name: "10-Band EQ"
+        full_name: "MXR 10 Band EQ"
+        knobs:
+          - {id: vol,    label: "VOL",   cc: 30, range: [0, 100]}
+          - {id: hz31,   label: "31Hz",  cc: 31, range: [0, 100]}
+          - {id: hz62,   label: "62Hz",  cc: 32, range: [0, 100]}
+          - {id: hz125,  label: "125Hz", cc: 33, range: [0, 100]}
+          - {id: hz250,  label: "250Hz", cc: 34, range: [0, 100]}
+          - {id: hz500,  label: "500Hz", cc: 35, range: [0, 100]}
+          - {id: khz1,   label: "1kHz",  cc: 36, range: [0, 100]}
+          - {id: khz2,   label: "2kHz",  cc: 37, range: [0, 100]}
+          - {id: khz4,   label: "4kHz",  cc: 38, range: [0, 100]}
+          - {id: khz8,   label: "8kHz",  cc: 39, range: [0, 100]}
+          - {id: khz16,  label: "16kHz", cc: 40, range: [0, 100]}
+          - {id: gain,   label: "GAIN",  cc: 41, range: [0, 100]}
+      - id: 0x03
+        name: "Para EQ"
+        full_name: "Parametric EQ"
+        knobs:
+          - {id: b1_freq, label: "BAND1 FREQ", cc: 30, range: [0, 100]}
+          - {id: b1_gain, label: "BAND1 GAIN", cc: 31, range: [0, 100]}
+          - {id: b1_q,    label: "BAND1 Q",    cc: 32, range: [0, 100]}
+          - {id: b2_freq, label: "BAND2 FREQ", cc: 33, range: [0, 100]}
+          - {id: b2_gain, label: "BAND2 GAIN", cc: 34, range: [0, 100]}
+          - {id: b2_q,    label: "BAND2 Q",    cc: 35, range: [0, 100]}
+          - {id: b3_freq, label: "BAND3 FREQ", cc: 36, range: [0, 100]}
+          - {id: b3_gain, label: "BAND3 GAIN", cc: 37, range: [0, 100]}
+          - {id: b3_q,    label: "BAND3 Q",    cc: 38, range: [0, 100]}
 
-  # Effets de distortion
-  distortion_effects:
-    - id: 0x40
-      name: "Overdrive"
-      category: "distortion"
-      parameters:
-        - name: "drive"
-          cc: 50
-          range: [0, 100]
-          default: 60
-        - name: "tone"
-          cc: 51
-          range: [0, 100]
-          default: 50
-        - name: "level"
-          cc: 52
-          range: [0, 100]
-          default: 50
-        - name: "bypass"
-          cc: 55
-          range: [0, 1]
-          default: 0
-          
-    - id: 0x41
-      name: "Distortion"
-      category: "distortion"
-      parameters:
-        - name: "drive"
-          cc: 50
-          range: [0, 100]
-          default: 70
-        - name: "tone"
-          cc: 51
-          range: [0, 100]
-          default: 60
-        - name: "level"
-          cc: 52
-          range: [0, 100]
-          default: 50
-        - name: "bypass"
-          cc: 55
-          range: [0, 1]
-          default: 0
+  gate:
+    bypass_cc: 5
+    models:
+      # ID provisional — only one model on MG-30
+      - id: 0x00
+        name: "Noise Gate"
+        knobs:
+          - {id: sens,  label: "SENSITIVITY", cc: 42, range: [0, 100]}
+          - {id: decay, label: "DECAY",       cc: 43, range: [0, 100]}
 
-  # Autres effets
-  other_effects:
-    - id: 0x50
-      name: "Noise Gate"
-      category: "utility"
-      parameters:
-        - name: "threshold"
-          cc: 60
-          range: [-60, 0]  # en dB
-          default: -40
-        - name: "attack"
-          cc: 61
-          range: [1, 100]  # en ms
-          default: 10
-        - name: "release"
-          cc: 62
-          range: [10, 1000]  # en ms
-          default: 200
-        - name: "bypass"
-          cc: 65
-          range: [0, 1]
-          default: 0
-          
-    - id: 0x51
-      name: "Compressor"
-      category: "dynamics"
-      parameters:
-        - name: "ratio"
-          cc: 70
-          range: [1, 10]
-          default: 4
-        - name: "threshold"
-          cc: 71
-          range: [-40, 0]  # en dB
-          default: -20
-        - name: "attack"
-          cc: 72
-          range: [1, 100]  # en ms
-          default: 10
-        - name: "release"
-          cc: 73
-          range: [50, 1000]  # en ms
-          default: 200
-        - name: "bypass"
-          cc: 75
-          range: [0, 1]
-          default: 0
+  mod:
+    bypass_cc: 6
+    models:
+      # IDs confirmed from reverse engineering
+      - id: 0x10
+        name: "CE-1"
+        full_name: "Roland CE-1 Chorus"
+        knobs:
+          - {id: intensity, label: "INTENSITY", cc: 46, range: [0, 100]}
+          - {id: depth,     label: "DEPTH",     cc: 47, range: [0, 100]}
+          - {id: rate,      label: "RATE",      cc: 48, range: [0, 100]}
+          - {id: subdiv,    label: "SUB DIV",   cc: 49, range: [0, 6]}
+      - id: 0x11
+        name: "CE-2"
+        full_name: "Roland CE-2 Chorus"
+        knobs:
+          - {id: rate,   label: "RATE",    cc: 46, range: [0, 100]}
+          - {id: depth,  label: "DEPTH",   cc: 47, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV", cc: 48, range: [0, 6]}
+      - id: 0x12
+        name: "ST. Chorus"
+        full_name: "MXR Stereo Chorus"
+        knobs:
+          - {id: intensity, label: "INTENSITY", cc: 46, range: [0, 100]}
+          - {id: width,     label: "WIDTH",     cc: 47, range: [0, 100]}
+          - {id: rate,      label: "RATE",      cc: 48, range: [0, 100]}
+          - {id: subdiv,    label: "SUB DIV",   cc: 49, range: [0, 6]}
+      - id: 0x13
+        name: "Vibrator"
+        full_name: "Boss VB-2 Vibrato"
+        knobs:
+          - {id: rate,   label: "RATE",    cc: 46, range: [0, 100]}
+          - {id: depth,  label: "DEPTH",   cc: 47, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV", cc: 48, range: [0, 6]}
+      - id: 0x14
+        name: "Detune"
+        full_name: "Stereo Detune"
+        knobs:
+          - {id: shift_l, label: "SHIFT LEFT",  cc: 46, range: [0, 100]}
+          - {id: mix_l,   label: "MIX L",       cc: 47, range: [0, 100]}
+          - {id: shift_r, label: "SHIFT RIGHT", cc: 48, range: [0, 100]}
+          - {id: mix_r,   label: "MIX R",       cc: 49, range: [0, 100]}
+      - id: 0x15
+        name: "Flanger"
+        full_name: "Boss BF-2 Flanger"
+        knobs:
+          - {id: level,  label: "LEVEL",   cc: 46, range: [0, 100]}
+          - {id: rate,   label: "RATE",    cc: 47, range: [0, 100]}
+          - {id: width,  label: "WIDTH",   cc: 48, range: [0, 100]}
+          - {id: fback,  label: "F.BACK",  cc: 49, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV", cc: 50, range: [0, 6]}
+      - id: 0x16
+        name: "Phase 90"
+        full_name: "MXR Phase 90"
+        knobs:
+          - {id: speed,  label: "SPEED",   cc: 46, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV", cc: 47, range: [0, 6]}
+      - id: 0x17
+        name: "Phase 100"
+        full_name: "MXR Phase 100"
+        knobs:
+          - {id: intensity, label: "INTENSITY", cc: 46, range: [0, 100]}
+          - {id: speed,     label: "SPEED",     cc: 47, range: [0, 100]}
+          - {id: subdiv,    label: "SUB DIV",   cc: 48, range: [0, 6]}
+      - id: 0x18
+        name: "S.C.F."
+        full_name: "TC Chorus SCF"
+        knobs:
+          - {id: speed,  label: "SPEED",     cc: 46, range: [0, 100]}
+          - {id: width,  label: "WIDTH",     cc: 47, range: [0, 100]}
+          - {id: mode,   label: "MODE",      cc: 48, range: [0, 2]}  # 0=CHORUS 1=PITCH MOD 2=FLANGER
+          - {id: intens, label: "INTENSITY", cc: 49, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV",   cc: 50, range: [0, 6]}
+      - id: 0x19
+        name: "U-Vibe"
+        full_name: "Dunlop Univibe"
+        knobs:
+          - {id: speed,  label: "SPEED",          cc: 46, range: [0, 100]}
+          - {id: volume, label: "VOLUME",          cc: 47, range: [0, 100]}
+          - {id: intens, label: "INTENSITY",       cc: 48, range: [0, 100]}
+          - {id: mode,   label: "CHORUS/VIBRATO",  cc: 49, range: [0, 1]}
+          - {id: subdiv, label: "SUB DIV",         cc: 50, range: [0, 6]}
+      - id: 0x1A
+        name: "Tremolo"
+        full_name: "Boss TR-3 Tremolo"
+        knobs:
+          - {id: rate,   label: "RATE",    cc: 46, range: [0, 100]}
+          - {id: depth,  label: "DEPTH",   cc: 47, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV", cc: 48, range: [0, 6]}
+      - id: 0x1B
+        name: "Rotar"
+        full_name: "Rotary Speaker"
+        knobs:
+          - {id: balance, label: "BALANCE", cc: 46, range: [0, 100]}
+          - {id: speed,   label: "SPEED",   cc: 47, range: [0, 100]}
+          - {id: subdiv,  label: "SUB DIV", cc: 48, range: [0, 6]}
 
-# Définition des effets MG-30 (selon spécifications officielles)
-mg30_effects:
-  # Overdrives/Distortions spécifiées
-  drives:
-    - {id: 0x40, name: "Dist+", category: "overdrive"}
-    - {id: 0x41, name: "RC Boost", category: "boost"}
-    - {id: 0x42, name: "AC Boost", category: "boost"}
-    - {id: 0x43, name: "Dist One", category: "distortion"}
-    - {id: 0x44, name: "T Scream", category: "overdrive"}
-    - {id: 0x45, name: "Blues Drv", category: "overdrive"}
-    - {id: 0x46, name: "Morning Drv", category: "overdrive"}
-    - {id: 0x47, name: "EAT", category: "overdrive"}
-    - {id: 0x48, name: "Red Dirt", category: "overdrive"}
-    - {id: 0x49, name: "Crunch", category: "distortion"}
-    - {id: 0x4A, name: "Muff Fuzz", category: "fuzz"}
-    - {id: 0x4B, name: "Katana Boost", category: "boost"}
-    - {id: 0x4C, name: "Red Fuzz", category: "fuzz"}
-    - {id: 0x4D, name: "Touch Wah", category: "wah"}
-    
-  # Modulations spécifiées
-  modulations:
-    - {id: 0x10, name: "CE-1", category: "chorus"}
-    - {id: 0x11, name: "CE-2", category: "chorus"}
-    - {id: 0x12, name: "ST. Chorus", category: "chorus"}
-    - {id: 0x13, name: "Vibrator", category: "vibrato"}
-    - {id: 0x14, name: "Detune", category: "pitch"}
-    - {id: 0x15, name: "Flanger", category: "flanger"}
-    - {id: 0x16, name: "Phase 90", category: "phaser"}
-    - {id: 0x17, name: "Phase 100", category: "phaser"}
-    - {id: 0x18, name: "S.C.F.", category: "phaser"}
-    - {id: 0x19, name: "U-Vibe", category: "vibe"}
-    - {id: 0x1A, name: "Tremolo", category: "tremolo"}
-    - {id: 0x1B, name: "Rotar", category: "rotary"}
+  delay:
+    bypass_cc: 7
+    models:
+      # IDs provisional — sequential from 0x20
+      - id: 0x20
+        name: "Analog Delay"
+        full_name: "Boss DM-2 Analog Delay"
+        knobs:
+          - {id: repeat, label: "REPEAT",    cc: 52, range: [0, 100]}
+          - {id: echo,   label: "ECHO",      cc: 53, range: [0, 100]}
+          - {id: intens, label: "INTENSITY", cc: 54, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV",   cc: 55, range: [0, 6]}
+      - id: 0x21
+        name: "Digi Delay"
+        full_name: "Boss DD-2 Digital Delay"
+        knobs:
+          - {id: level,  label: "EFFECT LEVEL", cc: 52, range: [0, 100]}
+          - {id: fback,  label: "FEEDBACK",     cc: 53, range: [0, 100]}
+          - {id: time,   label: "DELAY TIME",   cc: 54, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV",      cc: 55, range: [0, 6]}
+      - id: 0x22
+        name: "Modulation"
+        full_name: "Ibanez DML Modulation Delay"
+        knobs:
+          - {id: time,   label: "TIME",       cc: 52, range: [0, 100]}
+          - {id: level,  label: "LEVEL",      cc: 53, range: [0, 100]}
+          - {id: mod,    label: "MODULATION", cc: 54, range: [0, 100]}
+          - {id: repeat, label: "REPEAT",     cc: 55, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV",    cc: 56, range: [0, 6]}
+      - id: 0x23
+        name: "Tape Echo"
+        full_name: "Maestro EchoPlex EP-4"
+        knobs:
+          - {id: time,   label: "TIME",    cc: 52, range: [0, 100]}
+          - {id: level,  label: "LEVEL",   cc: 53, range: [0, 100]}
+          - {id: repeat, label: "REPEAT",  cc: 54, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV", cc: 55, range: [0, 6]}
+      - id: 0x24
+        name: "Reverse Delay"
+        full_name: "Boss DD-8 Reverse Delay"
+        knobs:
+          - {id: time,   label: "TIME",     cc: 52, range: [0, 100]}
+          - {id: mix,    label: "MIX",      cc: 53, range: [0, 100]}
+          - {id: fback,  label: "FEEDBACK", cc: 54, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV",  cc: 55, range: [0, 6]}
+      - id: 0x25
+        name: "Pan Delay"
+        full_name: "Ibanez DPL10 Stereo Pan Delay"
+        knobs:
+          - {id: time,   label: "TIME",        cc: 52, range: [0, 100]}
+          - {id: repeat, label: "REPEAT",      cc: 53, range: [0, 100]}
+          - {id: level,  label: "DELAY LEVEL", cc: 54, range: [0, 100]}
+          - {id: subdiv, label: "SUB DIV",     cc: 55, range: [0, 6]}
+      - id: 0x26
+        name: "Duotime"
+        full_name: "NUX Duotime"
+        knobs:
+          - {id: level,   label: "LEVEL",    cc: 52, range: [0, 100]}
+          - {id: time1,   label: "TIME1",    cc: 53, range: [0, 100]}
+          - {id: subdiv1, label: "SUB DIV1", cc: 54, range: [0, 6]}
+          - {id: repeat1, label: "REPEAT1",  cc: 55, range: [0, 100]}
+          - {id: time2,   label: "TIME2",    cc: 56, range: [0, 100]}
+          - {id: subdiv2, label: "SUB DIV2", cc: 57, range: [0, 6]}
+          - {id: repeat2, label: "REPEAT2",  cc: 58, range: [0, 100]}
 
-# Amplis secrets Mighty Plug Pro/Space (confirmés par mightier_amp)
-secret_amps:
-  mighty_plug_pro:
-    - {id: 0x08, name: "Twin Rvb", category: "clean"}
-    - {id: 0x09, name: "Class A15", category: "clean"}
-    - {id: 0x0A, name: "Vibro King", category: "clean"}
-    - {id: 0x0B, name: "Budda", category: "clean"}
-    - {id: 0x0C, name: "Brit Blues", category: "crunch"}
-    - {id: 0x0D, name: "Match D30", category: "crunch"}
-    - {id: 0x0E, name: "Brit 2000", category: "high_gain"}
-    - {id: 0x0F, name: "Uber HiGain", category: "high_gain"}
-    
-  mighty_space:
-    # Identiques au Mighty Plug Pro
-    - {id: 0x08, name: "Twin Rvb", category: "clean"}
-    - {id: 0x09, name: "Class A15", category: "clean"}
-    - {id: 0x0A, name: "Vibro King", category: "clean"}
-    - {id: 0x0B, name: "Budda", category: "clean"}
-    - {id: 0x0C, name: "Brit Blues", category: "crunch"}
-    - {id: 0x0D, name: "Match D30", category: "crunch"}
-    - {id: 0x0E, name: "Brit 2000", category: "high_gain"}
-    - {id: 0x0F, name: "Uber HiGain", category: "high_gain"}
+  reverb:
+    bypass_cc: 8
+    models:
+      # IDs provisional — sequential from 0x30
+      - id: 0x30
+        name: "Room"
+        full_name: "T-Rex Room Mate Reverb"
+        knobs:
+          - {id: decay, label: "DECAY", cc: 60, range: [0, 100]}
+          - {id: tone,  label: "TONE",  cc: 61, range: [0, 100]}
+          - {id: level, label: "LEVEL", cc: 62, range: [0, 100]}
+      - id: 0x31
+        name: "Hall"
+        full_name: "Lexicon 224 Hall Reverb"
+        knobs:
+          - {id: decay,    label: "DECAY",      cc: 60, range: [0, 100]}
+          - {id: predelay, label: "PRE DELAY",  cc: 61, range: [0, 100]}
+          - {id: liveness, label: "LIVELINESS", cc: 62, range: [0, 100]}
+          - {id: level,    label: "LEVEL",      cc: 63, range: [0, 100]}
+      - id: 0x32
+        name: "Plate"
+        full_name: "EMT 140 Plate Reverb"
+        knobs:
+          - {id: decay, label: "DECAY", cc: 60, range: [0, 100]}
+          - {id: level, label: "LEVEL", cc: 61, range: [0, 100]}
+      - id: 0x33
+        name: "Spring"
+        full_name: "Vintage Spring Reverb"
+        knobs:
+          - {id: decay, label: "DECAY", cc: 60, range: [0, 100]}
+          - {id: level, label: "LEVEL", cc: 61, range: [0, 100]}
+      - id: 0x34
+        name: "Shimmer"
+        full_name: "Shimmer Reverb"
+        knobs:
+          - {id: mix,   label: "MIX",   cc: 60, range: [0, 100]}
+          - {id: decay, label: "DECAY", cc: 61, range: [0, 100]}
+          - {id: shim,  label: "SHIM",  cc: 62, range: [0, 100]}
+
+  ir:
+    bypass_cc: 9
+    # Electric guitar cabs: MIC (CC64) and MIC AXIS (CC65) knobs available.
+    # Bass and acoustic cabs: no_mic=true, MIC/MIC AXIS knobs absent.
+    shared_electric_knobs:
+      - {id: mic,      label: "MIC",      cc: 64, range: [0, 7]}  # DYN421/S57/U87/R122/R121/C414/C3000/B52
+      - {id: mic_axis, label: "MIC AXIS", cc: 65, range: [0, 2]}  # CENTER/MIDDLE/EDGE
+      - {id: level,    label: "LEVEL",    cc: 66, range: [0, 100]}
+      - {id: lo_cut,   label: "LO CUT",   cc: 67, range: [0, 100]}
+      - {id: hi_cut,   label: "HI CUT",   cc: 68, range: [0, 100]}
+    shared_other_knobs:
+      - {id: level,  label: "LEVEL",  cc: 66, range: [0, 100]}
+      - {id: lo_cut, label: "LO CUT", cc: 67, range: [0, 100]}
+      - {id: hi_cut, label: "HI CUT", cc: 68, range: [0, 100]}
+    models:
+      # IDs provisional — sequential from 0x00
+      - {id: 0x00, name: "JZ 120",      full_name: "Roland JC120",                 category: electric}
+      - {id: 0x01, name: "DR112",       full_name: "1964 Deluxe Reverb 1x12",      category: electric}
+      - {id: 0x02, name: "BS410",       full_name: "1959 Bassman 4x10",            category: electric}
+      - {id: 0x03, name: "A212",        full_name: "Vox AC30 2x12",                category: electric}
+      - {id: 0x04, name: "TR212",       full_name: "1965 Twin Reverb 2x12",        category: electric}
+      - {id: 0x05, name: "1960",        full_name: "Marshall 1960 4x12",           category: electric}
+      - {id: 0x06, name: "GB412",       full_name: "Marshall Greenback 4x12",      category: electric}
+      - {id: 0x07, name: "V412",        full_name: "Marshall Vintage 30 4x12",     category: electric}
+      - {id: 0x08, name: "AGL DB810",   full_name: "Aguilar 8x10",                 category: bass,     no_mic: true}
+      - {id: 0x09, name: "AMP SV810",   full_name: "Ampeg SVT 8x10",               category: bass,     no_mic: true}
+      - {id: 0x0A, name: "AMP SV410",   full_name: "Ampeg SVT 4x10",               category: bass,     no_mic: true}
+      - {id: 0x0B, name: "AMP SV212",   full_name: "Ampeg SVT 2x12",               category: bass,     no_mic: true}
+      - {id: 0x0C, name: "MKB 410",     full_name: "Mark Bass 4x10",               category: bass,     no_mic: true}
+      - {id: 0x0D, name: "TRC 410",     full_name: "Trace Elliot 4x10",            category: bass,     no_mic: true}
+      - {id: 0x0E, name: "EDEN 410",    full_name: "Eden 4x10",                    category: bass,     no_mic: true}
+      - {id: 0x0F, name: "Bassguy 410", full_name: "Fender Bassman 4x10",          category: bass,     no_mic: true}
+      - {id: 0x10, name: "M-D45",       full_name: "Martin D45 (Acoustic)",        category: acoustic, no_mic: true}
+      - {id: 0x11, name: "G-HBird",     full_name: "Gibson Hummingbird (Acoustic)", category: acoustic, no_mic: true}
+      - {id: 0x12, name: "G-J15",       full_name: "Gibson J-15 (Acoustic)",       category: acoustic, no_mic: true}
+      - {id: 0x13, name: "User IR",     full_name: "User IR Cab",                  category: user}
+
+  vol:
+    bypass_cc: 10  # Send/Return slot
+    knobs:
+      - {id: patch_vol, label: "PATCH VOLUME", cc: 72, range: [0, 100]}
+      - {id: send,      label: "SEND",         cc: 70, range: [0, 100]}
+      - {id: return_,   label: "RETURN",       cc: 71, range: [0, 100]}
+
+# ---------------------------------------------------------------------------
+# Mighty Plug Pro / Mighty Space — secret amp models
+# Same set for device_id 0x03 (MP-3) and 0x04 (MS-1).
+# Unlocked via secret_amps_unlock SysEx from Misc.md.
+# ---------------------------------------------------------------------------
+mighty_pro:
+  secret_amps:
+    models:
+      - {id: 0x08, name: "Twin Rvb",    category: clean}
+      - {id: 0x09, name: "Class A15",   category: clean}
+      - {id: 0x0A, name: "Vibro King",  category: clean}
+      - {id: 0x0B, name: "Budda",       category: clean}
+      - {id: 0x0C, name: "Brit Blues",  category: crunch}
+      - {id: 0x0D, name: "Match D30",   category: crunch}
+      - {id: 0x0E, name: "Brit 2000",   category: high_gain}
+      - {id: 0x0F, name: "Uber HiGain", category: high_gain}
