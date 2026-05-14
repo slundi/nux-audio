@@ -200,6 +200,20 @@ pub fn mg30_set_effect_order(slot_ids: &[u8]) -> Vec<u8> {
     payload
 }
 
+/// Switch the active model in an MG-30 effect slot.
+///
+/// `category_id`: the `EffectCategory` discriminant (`EffectCategory as u8`):
+///   Wah=0, Comp=1, Efx=2, Amp=3, Eq=4, Gate=5, Mod=6, Delay=7, Reverb=8, Ir=9, Sr=10.
+/// `model_id`: the model byte from the static catalog (e.g. `0x45` for a specific amp).
+///
+/// # Wire format (provisional — not yet verified against hardware captures)
+///
+/// Send with `manager.send_sysex(&mg30_change_effect_model(cat, id))`.
+/// The full wire message will be: `F0 43 58 09 30 <category_id> <model_id> F7`
+pub fn mg30_change_effect_model(category_id: u8, model_id: u8) -> [u8; 5] {
+    [0x58, 0x09, 0x30, category_id, model_id]
+}
+
 // ── Mighty series parameterized payload builders ──────────────────────────────
 
 /// Change preset on a Mighty series device over MIDI.
@@ -278,6 +292,22 @@ pub mod templates {
                 TemplateSlot::Byte(0x00),
                 TemplateSlot::Byte(0x00),
                 TemplateSlot::Byte(0x00),
+            ],
+        }
+    }
+
+    /// MG-30: switch the active model within an effect slot [provisional].
+    ///
+    /// Parameters: `"category_id"` (`EffectCategory as u8`), `"model_id"` (catalog byte).
+    pub fn mg30_effect_model_change() -> SysExTemplate {
+        SysExTemplate {
+            description: "MG-30 effect model switch [provisional — unverified against hardware]",
+            slots: vec![
+                TemplateSlot::Byte(0x58),
+                TemplateSlot::Byte(0x09),
+                TemplateSlot::Byte(0x30),
+                TemplateSlot::Param("category_id"),
+                TemplateSlot::Param("model_id"),
             ],
         }
     }
@@ -402,6 +432,20 @@ mod tests {
     }
 
     #[test]
+    fn test_mg30_change_effect_model() {
+        // Provisional format: [0x58, 0x09, 0x30, category_id, model_id]
+        assert_eq!(
+            mg30_change_effect_model(3, 0x45),
+            [0x58, 0x09, 0x30, 3, 0x45]
+        );
+        // Reverb slot (8) with model 0x21
+        assert_eq!(
+            mg30_change_effect_model(8, 0x21),
+            [0x58, 0x09, 0x30, 8, 0x21]
+        );
+    }
+
+    #[test]
     fn test_template_matches_typed_builder() {
         // Template and typed builder must agree on the wire bytes.
         let t = templates::mg30_preset_change();
@@ -429,5 +473,12 @@ mod tests {
             .unwrap();
         let from_builder4 = mighty_change_preset(0x01, 3).unwrap().to_vec();
         assert_eq!(from_template4, from_builder4);
+
+        let t5 = templates::mg30_effect_model_change();
+        let from_template5 = t5
+            .build(&HashMap::from([("category_id", 3u8), ("model_id", 0x45u8)]))
+            .unwrap();
+        let from_builder5 = mg30_change_effect_model(3, 0x45).to_vec();
+        assert_eq!(from_template5, from_builder5);
     }
 }

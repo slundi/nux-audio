@@ -108,6 +108,12 @@ impl Cli {
             } => {
                 self.send_bypass_cc(category, state).await;
             }
+            Commands::Model {
+                ref category,
+                ref model,
+            } => {
+                self.send_model_change(category, model).await;
+            }
             Commands::Raw {
                 ref data,
                 decimal,
@@ -263,6 +269,86 @@ impl Cli {
 
         if errors > 0 {
             eprintln!("{errors} error(s) occurred");
+        }
+    }
+
+    /// Switch the active model within an effect slot via SysEx.
+    ///
+    /// `model_str` accepts: `"0x45"` (hex), `"69"` (decimal), or a model name
+    /// matched case-insensitively against the built-in catalog.
+    ///
+    /// The SysEx format is provisional pending hardware verification.
+    async fn send_model_change(&self, category_str: &str, model_str: &str) {
+        use crate::effects::{EffectCategory, find_model_by_name};
+        use nux_audio::nux_sys_ex_commands::mg30_change_effect_model;
+
+        let category = match category_str.parse::<EffectCategory>() {
+            Ok(c) => c,
+            Err(()) => {
+                eprintln!(
+                    "Unknown effect category '{category_str}'. \
+                     Try: wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir"
+                );
+                return;
+            }
+        };
+
+        // Resolve model: hex (0x…), decimal, or name search
+        let (model_id, model_title) = if let Some(hex) = model_str
+            .strip_prefix("0x")
+            .or_else(|| model_str.strip_prefix("0X"))
+        {
+            match u8::from_str_radix(hex, 16) {
+                Ok(id) => (id, None),
+                Err(_) => {
+                    eprintln!("Invalid hex model ID '{model_str}'");
+                    return;
+                }
+            }
+        } else if let Ok(id) = model_str.parse::<u8>() {
+            (id, None)
+        } else {
+            match find_model_by_name(category, model_str) {
+                Some((id, opt)) => (id, Some(opt.title)),
+                None => {
+                    eprintln!(
+                        "Model '{model_str}' not found in {} catalog",
+                        category.as_str()
+                    );
+                    return;
+                }
+            }
+        };
+
+        let (device, _port_in, port_out) = match self.resolve_ports() {
+            Some(t) => t,
+            None => return,
+        };
+
+        let mut manager = match MidiManager::new() {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Cannot create MIDI manager: {e}");
+                return;
+            }
+        };
+
+        if let Err(e) = manager.connect_output(port_out) {
+            eprintln!("Cannot connect to {}: {e}", device.model);
+            return;
+        }
+
+        let payload = mg30_change_effect_model(category as u8, model_id);
+        match manager.send_sysex(&payload) {
+            Ok(()) => {
+                let name_part = model_title.map(|t| format!(" ({t})")).unwrap_or_default();
+                println!(
+                    "{} model → 0x{model_id:02X}{name_part} [provisional SysEx] ({})",
+                    category.as_str(),
+                    device.model
+                );
+            }
+            Err(e) => eprintln!("Failed to send model change SysEx: {e}"),
         }
     }
 
@@ -465,6 +551,23 @@ pub enum Commands {
         /// Example: "gain=80,tone=50" or "1=80,2=50"
         #[arg(value_parser = parse_effect_parameters)]
         parameters: Vec<EffectParameter>,
+    },
+
+    /// Switch the active model within an effect slot
+    ///
+    /// The model can be specified as a hex ID (0x45), a decimal ID (69), or
+    /// a model name ("Tweed 1x8").  The name is matched case-insensitively
+    /// against the built-in catalog.
+    ///
+    /// Example: nux model amp 0x45
+    ///          nux model reverb "Hall"
+    ///          nux model delay 84
+    Model {
+        /// Effect slot name (wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir)
+        category: String,
+
+        /// Model to activate: hex ID (0x45), decimal ID (69), or model name ("Hall")
+        model: String,
     },
 
     /// Toggle the bypass state of an effect slot
@@ -713,6 +816,42 @@ mod tests {
         let result = parse_effect_parameters("gain=invalid");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid value"));
+    }
+
+    #[test]
+    fn test_model_command_hex_id() {
+        let args = ["guitar-fx", "model", "amp", "0x45"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        if let Commands::Model { category, model } = cli.command {
+            assert_eq!(category, "amp");
+            assert_eq!(model, "0x45");
+        } else {
+            panic!("Expected model command");
+        }
+    }
+
+    #[test]
+    fn test_model_command_name() {
+        let args = ["guitar-fx", "model", "reverb", "Hall"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        if let Commands::Model { category, model } = cli.command {
+            assert_eq!(category, "reverb");
+            assert_eq!(model, "Hall");
+        } else {
+            panic!("Expected model command");
+        }
+    }
+
+    #[test]
+    fn test_model_command_decimal_id() {
+        let args = ["guitar-fx", "model", "delay", "69"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        if let Commands::Model { category, model } = cli.command {
+            assert_eq!(category, "delay");
+            assert_eq!(model, "69");
+        } else {
+            panic!("Expected model command");
+        }
     }
 
     #[test]

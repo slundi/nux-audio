@@ -245,6 +245,34 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxErro
     Ok(effects)
 }
 
+/// Look up an effect model by name (case-insensitive) within a category's static catalog.
+///
+/// Returns `(model_id, &EffectOption)` for the first model whose `title` matches
+/// `name`.  Returns `None` when the category has no catalog (`Vol`, `Sr`) or
+/// when no model title matches.
+pub fn find_model_by_name(
+    category: EffectCategory,
+    name: &str,
+) -> Option<(u8, &'static EffectOption<'static>)> {
+    let models: &std::collections::HashMap<u8, EffectOption<'static>> = match category {
+        EffectCategory::Wah => &wah::MODELS,
+        EffectCategory::Comp => &compression::MODELS,
+        EffectCategory::Efx => &efx::MODELS,
+        EffectCategory::Amp => &amp::MODELS,
+        EffectCategory::Eq => &equalizer::MODELS,
+        EffectCategory::Gate => &gate::MODELS,
+        EffectCategory::Mod => &modulation::MODELS,
+        EffectCategory::Delay => &delay::MODELS,
+        EffectCategory::Reverb => &reverb::MODELS,
+        EffectCategory::Ir => &ir::MODELS,
+        EffectCategory::Vol | EffectCategory::Sr => return None,
+    };
+    models
+        .iter()
+        .find(|(_, opt)| opt.title.eq_ignore_ascii_case(name))
+        .map(|(k, v)| (*k, v))
+}
+
 /// Find the MIDI CC number for a knob by its `id` string within a category's model catalog.
 ///
 /// Searches all models in the category and returns the first matching CC.  Within a slot,
@@ -455,6 +483,34 @@ mod tests {
     fn test_ir_knob_ccs_in_range() {
         let ir_ccs: Vec<u8> = (64..=69).collect();
         assert_ccs_in_range(&ir::MODELS, "Ir", &ir_ccs);
+    }
+
+    #[test]
+    fn test_find_model_by_name_found() {
+        // "Dist+" is in the EFX catalog at id 0x40
+        let result = find_model_by_name(EffectCategory::Efx, "Dist+");
+        assert!(result.is_some());
+        let (id, opt) = result.unwrap();
+        assert_eq!(id, 0x40);
+        assert_eq!(opt.title, "Dist+");
+    }
+
+    #[test]
+    fn test_find_model_by_name_case_insensitive() {
+        let result = find_model_by_name(EffectCategory::Efx, "dist+");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().0, 0x40);
+    }
+
+    #[test]
+    fn test_find_model_by_name_not_found() {
+        assert!(find_model_by_name(EffectCategory::Amp, "Nonexistent Model").is_none());
+    }
+
+    #[test]
+    fn test_find_model_by_name_vol_sr_none() {
+        assert!(find_model_by_name(EffectCategory::Vol, "Volume").is_none());
+        assert!(find_model_by_name(EffectCategory::Sr, "Send").is_none());
     }
 
     #[test]

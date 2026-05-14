@@ -24,7 +24,7 @@
 * [x] **Effect model catalog**: Full MG-30 static catalog complete — wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir, vol (100+ models with correct CC assignments).
 * [x] **CC send**: `nux effect <category> <knob>=<value>` sends MIDI CC in real time. Named knobs resolved via catalog (`EffectCategory` impl `FromStr`; `find_cc_for_knob`). Numeric knobs treated as direct CC numbers. `MidiManager::connect_output` added for send-only connections.
 * [x] **Bypass toggle**: `nux bypass <category> on|off` sends the slot's bypass CC (`EffectCategory::bypass_cc()`). `Vol` and `Sr` are rejected with a clear error. Accepts `on/off/1/0/enable/disable`.
-* [ ] **Model switch**: Send SysEx to change active model within a slot.
+* [x] **Model switch**: `nux model <category> <model>` sends `mg30_change_effect_model` SysEx. Model resolved by hex ID (`0x45`), decimal ID (`69`), or case-insensitive name search (`find_model_by_name`). SysEx format provisional pending hardware capture.
 
 ## Phase 5: CLI (stateless)
 
