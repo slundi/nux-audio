@@ -1,0 +1,87 @@
+# Device registry for Nux audio devices.
+#
+# This file is embedded at compile time and parsed at startup to build the
+# runtime DeviceRegistry.  It is the machine-readable counterpart to
+# devices.yaml (which contains broader documentation and family metadata).
+#
+# Fields
+# ------
+# key              : internal slug (snake_case, unique)
+# name             : human-readable product name
+# model_code       : short code used internally and in SysEx ("MG-30", "MP-3", …)
+# device_id        : SysEx device byte (hex) — must match devices.yaml
+# midi_channel     : MIDI channel (1-based)
+# preset_count     : number of user preset slots
+# midi_port_prefix : prefix of the OS MIDI port name for this device (used for auto-detection)
+# signal_chain     : effect slot names in processing order
+
+# ---------------------------------------------------------------------------
+# MG-30 — Versatile Modeler
+# ---------------------------------------------------------------------------
+[[device]]
+key              = "mg_30"
+name             = "MG-30 Versatile Modeler"
+model_code       = "MG-30"
+device_id        = 0x09
+midi_channel     = 1
+preset_count     = 128
+midi_port_prefix = "NUX MG-30"
+signal_chain     = ["wah", "comp", "efx", "amp", "eq", "gate", "mod", "delay", "reverb", "ir", "vol"]
+
+# ---------------------------------------------------------------------------
+# Mighty Plug Pro / Mighty Space — Advanced headphone amp family
+# NOTE: "Mighty Plug Pro" must appear before "Mighty Plug" so the longer
+# prefix is tried first by the registry (match_port uses longest-match).
+# ---------------------------------------------------------------------------
+[[device]]
+key              = "mighty_plug_pro"
+name             = "Mighty Plug Pro MP-3"
+model_code       = "MP-3"
+device_id        = 0x03
+midi_channel     = 1
+preset_count     = 7
+midi_port_prefix = "NUX Mighty Plug Pro"
+signal_chain     = ["gate", "comp", "efx", "amp", "ir", "eq", "mod", "delay", "reverb", "vol"]
+
+[[device]]
+key              = "mighty_space"
+name             = "Mighty Space"
+model_code       = "MS-1"
+device_id        = 0x04
+midi_channel     = 1
+preset_count     = 7
+midi_port_prefix = "NUX Mighty Space"
+signal_chain     = ["gate", "comp", "efx", "amp", "ir", "eq", "mod", "delay", "reverb", "vol"]
+
+# ---------------------------------------------------------------------------
+# Mighty Basic — Mighty Plug MP-2 / Mighty Air
+# ---------------------------------------------------------------------------
+[[device]]
+key              = "mighty_plug"
+name             = "Mighty Plug MP-2"
+model_code       = "MP-2"
+device_id        = 0x01
+midi_channel     = 1
+preset_count     = 7
+midi_port_prefix = "NUX Mighty Plug"
+signal_chain     = ["gate", "comp", "amp", "ir", "eq", "mod", "delay", "reverb"]
+
+[[device]]
+key              = "mighty_air"
+name             = "Mighty Air"
+model_code       = "MA-1"
+device_id        = 0x02
+midi_channel     = 1
+preset_count     = 7
+midi_port_prefix = "NUX Mighty Air"
+signal_chain     = ["gate", "comp", "amp", "ir", "eq", "mod", "delay", "reverb"]
+
+[[device]]
+key              = "mighty_lite_bt"
+name             = "Mighty Lite BT MKII"
+model_code       = "ML-2"
+device_id        = 0x05
+midi_channel     = 1
+preset_count     = 7
+midi_port_prefix = "NUX Mighty Lite"
+signal_chain     = ["gate", "comp", "amp", "ir", "eq", "mod", "delay", "reverb"]

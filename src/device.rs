@@ -68,38 +68,16 @@ impl Device {
         name.trim().to_string()
     }
 
-    /// Match a cleaned device name against known Nux devices.
+    /// Match a cleaned device name against known Nux devices via the runtime registry.
     ///
     /// Returns `(Manufacturer, model_code, device_id)` on a match.
-    /// The `device_id` corresponds to the value in `devices.yaml` and is used in SysEx headers.
-    ///
-    /// # Port name patterns
-    /// - MG-30 pattern is confirmed from hardware.
-    /// - Mighty series patterns are provisional — verify with physical devices and
-    ///   update if the OS reports a different port name.
+    /// Device definitions live in `devices.toml` — add or update entries there
+    /// rather than editing this function.
     fn extract_supported(value: &str) -> Option<(Manufacturer, String, u8)> {
-        // MG-30 — confirmed
-        if value.starts_with("NUX MG-30") {
-            return Some((Manufacturer::Nux, "MG-30".to_string(), 0x09));
-        }
-        // Mighty Pro must be checked before Mighty Plug to avoid prefix collision.
-        if value.starts_with("NUX Mighty Plug Pro") {
-            return Some((Manufacturer::Nux, "MP-3".to_string(), 0x03));
-        }
-        if value.starts_with("NUX Mighty Space") {
-            return Some((Manufacturer::Nux, "MS-1".to_string(), 0x04));
-        }
-        // Mighty Basic — after Pro check
-        if value.starts_with("NUX Mighty Plug") {
-            return Some((Manufacturer::Nux, "MP-2".to_string(), 0x01));
-        }
-        if value.starts_with("NUX Mighty Air") {
-            return Some((Manufacturer::Nux, "MA-1".to_string(), 0x02));
-        }
-        if value.starts_with("NUX Mighty Lite") {
-            return Some((Manufacturer::Nux, "ML-2".to_string(), 0x05));
-        }
-        None
+        use crate::registry::REGISTRY;
+        REGISTRY
+            .match_port(value)
+            .map(|spec| (Manufacturer::Nux, spec.model_code.clone(), spec.device_id))
     }
 
     /// Detect supported device(s) and return a list of available devices with their MIDI ports.
