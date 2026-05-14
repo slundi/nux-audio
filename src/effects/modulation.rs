@@ -1,15 +1,192 @@
-// MODULATION		5 WAY ENCODER (ROTATE to CHANGE)	5 WAY ENCODER (TAP SW)	KNOB1           (TAP SW               = PAGE1)	(PAGE1)  KNOB1 	(PAGE1)  KNOB2 	(PAGE1)  KNOB3 	(PAGE1)  KNOB4	KNOB2             (TAP SW             = PAGE2)	(PAGE2)  KNOB1	KNOB4         (TAP SW)
-// 	ROLAND CE-1 CHORUS	CE-1	ON / BYPASS		INTENSITY	DEPTH	RATE	SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)			RESTORE
-// 	ROLAND CE-2 CHORUS	CE-2	ON / BYPASS		RATE	DEPTH	SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)				RESTORE
-// 	MXR STEREO CHORUS 	STEREO CHORUS	ON / BYPASS		INTENSITY	WIDTH	RATE	SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)			RESTORE
-// 	BOSS VB-2 Vibrato	VIBRATOR	ON / BYPASS		RATE	DEPTH	SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)				RESTORE
-// 	Stereo DETUNE	DETUNE	ON / BYPASS		SHIFT LEFT OUT	MIX	SHIFT RIGHT OUT	MIX			RESTORE
-// 	BOSS BF-2 Flanger	FLANGER	ON / BYPASS		LEVEL	RATE	WIDTH	F.BACK		SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)	RESTORE
-// 	MXR PHASE 90	PH 90	ON / BYPASS		SPEED	SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)					RESTORE
-// 	MXR PHASE 100	PHASE 100	ON / BYPASS		INTENSITY	SPEED	SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)				RESTORE
-// 	TC CHORUS 	S.C.F.	ON / BYPASS		SPEED	WIDTH	CHORUS/ PITCH MODULATOR/ FLANGER	INTENSITY		SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)	RESTORE
-// 	DUNLOP UNIVIBE	U-VIBE	ON / BYPASS		SPEED	VOLUME	INTENSITY	CHORUS / VIBRATO		SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)	RESTORE
-// 	BOSS TR-3 TREMOLO	TREMOLO	ON / BYPASS		RATE	DEPTH	SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)				RESTORE
-// 	ROTARY SPEAKER	RTY SPK	ON / BYPASS		BALANCE	SPEED	SUB DIV (1/4.1/8D, 1/8,1/4T,1/16, 1/8T,1/32)				RESTORE
-// 	MXR HARMONIZER	HARMONY	ON / BYPASS		KEY(C,C#,D,Eb,E,F,F#,G,Ab,A,Bb,B)	MINOR / MAJOR	"HARM
-// (-8,-6,-5,-4,-3,+3,+4,+5,+6,+8)"	BLEND			RESTORE
+// MODULATION models for MG-30
+// Reference: modulation.rs device observations + effects.yaml
+//
+// Bypass CC: 6
+// Knob CCs: KNOB1-6 = CC46..CC51
+//
+// IDs confirmed from hardware reverse-engineering.
+
+use std::{collections::HashMap, sync::LazyLock};
+
+use super::{EffectOption, Knob};
+
+fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> Knob<'static> {
+    Knob {
+        id,
+        title,
+        range_start: Some(0),
+        range_end: Some(end),
+        ctrl: cc,
+        current_value: None,
+    }
+}
+
+/// MG-30 modulation model catalog, keyed by model ID.
+pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+    HashMap::from([
+        (
+            0x10,
+            EffectOption {
+                id: 0x10,
+                title: "CE-1",
+                knobs: vec![
+                    knob("intensity", "INTENSITY", 46, 100),
+                    knob("depth", "DEPTH", 47, 100),
+                    knob("rate", "RATE", 48, 100),
+                    knob("subdiv", "SUB DIV", 49, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x11,
+            EffectOption {
+                id: 0x11,
+                title: "CE-2",
+                knobs: vec![
+                    knob("rate", "RATE", 46, 100),
+                    knob("depth", "DEPTH", 47, 100),
+                    knob("subdiv", "SUB DIV", 48, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x12,
+            EffectOption {
+                id: 0x12,
+                title: "ST. Chorus",
+                knobs: vec![
+                    knob("intensity", "INTENSITY", 46, 100),
+                    knob("width", "WIDTH", 47, 100),
+                    knob("rate", "RATE", 48, 100),
+                    knob("subdiv", "SUB DIV", 49, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x13,
+            EffectOption {
+                id: 0x13,
+                title: "Vibrator",
+                knobs: vec![
+                    knob("rate", "RATE", 46, 100),
+                    knob("depth", "DEPTH", 47, 100),
+                    knob("subdiv", "SUB DIV", 48, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x14,
+            EffectOption {
+                id: 0x14,
+                title: "Detune",
+                knobs: vec![
+                    knob("shift_l", "SHIFT LEFT", 46, 100),
+                    knob("mix_l", "MIX L", 47, 100),
+                    knob("shift_r", "SHIFT RIGHT", 48, 100),
+                    knob("mix_r", "MIX R", 49, 100),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x15,
+            EffectOption {
+                id: 0x15,
+                title: "Flanger",
+                knobs: vec![
+                    knob("level", "LEVEL", 46, 100),
+                    knob("rate", "RATE", 47, 100),
+                    knob("width", "WIDTH", 48, 100),
+                    knob("fback", "F.BACK", 49, 100),
+                    knob("subdiv", "SUB DIV", 50, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x16,
+            EffectOption {
+                id: 0x16,
+                title: "Phase 90",
+                knobs: vec![
+                    knob("speed", "SPEED", 46, 100),
+                    knob("subdiv", "SUB DIV", 47, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x17,
+            EffectOption {
+                id: 0x17,
+                title: "Phase 100",
+                knobs: vec![
+                    knob("intensity", "INTENSITY", 46, 100),
+                    knob("speed", "SPEED", 47, 100),
+                    knob("subdiv", "SUB DIV", 48, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x18,
+            EffectOption {
+                id: 0x18,
+                title: "S.C.F.",
+                knobs: vec![
+                    knob("speed", "SPEED", 46, 100),
+                    knob("width", "WIDTH", 47, 100),
+                    knob("mode", "MODE", 48, 2), // 0=CHORUS 1=PITCH MOD 2=FLANGER
+                    knob("intens", "INTENSITY", 49, 100),
+                    knob("subdiv", "SUB DIV", 50, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x19,
+            EffectOption {
+                id: 0x19,
+                title: "U-Vibe",
+                knobs: vec![
+                    knob("speed", "SPEED", 46, 100),
+                    knob("volume", "VOLUME", 47, 100),
+                    knob("intens", "INTENSITY", 48, 100),
+                    knob("mode", "CHORUS/VIBRATO", 49, 1),
+                    knob("subdiv", "SUB DIV", 50, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x1A,
+            EffectOption {
+                id: 0x1A,
+                title: "Tremolo",
+                knobs: vec![
+                    knob("rate", "RATE", 46, 100),
+                    knob("depth", "DEPTH", 47, 100),
+                    knob("subdiv", "SUB DIV", 48, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x1B,
+            EffectOption {
+                id: 0x1B,
+                title: "Rotar",
+                knobs: vec![
+                    knob("balance", "BALANCE", 46, 100),
+                    knob("speed", "SPEED", 47, 100),
+                    knob("subdiv", "SUB DIV", 48, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+    ])
+});

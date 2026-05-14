@@ -1,31 +1,546 @@
-// AMP		5 WAY ENCODER (ROTATE to CHANGE)	5 WAY ENCODER (TAP SW)	KNOB1           (TAP SW               = PAGE1)	(PAGE1)  KNOB1 	(PAGE1)  KNOB2 	(PAGE1)  KNOB3 	(PAGE1)  KNOB4	KNOB2     (TAP SW      = PAGE2)	(PAGE2)  KNOB1	(PAGE2)  KNOB2	(PAGE2)  KNOB3	(PAGE2)  KNOB4	KNOB4         (TAP SW)
-// 	Roland JC-120	JAZZ CLEAN	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	BRIGHT SW	LEVEL	 	RESTORE
-// 	64 Fender Deluxe Reverb	DELUXE RVB	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	BIAS	LEVEL	 	RESTORE
-// 	59 Fender Bassman	BASS MATE	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	57 Fender Tweed Deluxe	TWEEDY	ON / BYPASS		GAIN	TONE	MASTER			LEVEL	 	 	 	RESTORE
-// 	65 Fender Twin Reverb	TWIN RVB	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	BRIGHT SW	BIAS	LEVEL	RESTORE
-// 	1969 HIWATT	HIWIRE	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	1978 Mesa Boogie MK1	CALI CRUNCH	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	VOX AC15	CLASS A 15	ON / BYPASS		GAIN	MASTER	CUT	BASS		TREBLE	LEVEL	 	 	RESTORE
-// 	VOX AC30	CLASS A 30	ON / BYPASS		GAIN	MASTER	CUT	BASS		TREBLE	LEVEL	 	 	RESTORE
-// 	68 Marshall Plexi 100W	PLEXI 100W	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	67 Marshall Plexi 45W	PLEXI 45	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	1977 Marshall JCM800	BRIT 800	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	1989 Marshall 1987 X 50W	1987 X 50W	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	1980 Soldano SLO 100	SLO 100	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	2005 Friedman HBE	FIREMAN HBE	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	1985 Mesa Dual Rectifier	DUAL RECT	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	1999 DEIZEL VH4	DIE VH4	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	1990 Fender Vibro King	VIBRO KING	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	BUDDA	BUDDA	ON / BYPASS		GAIN	MASTER	CUT	BASS		MIDDLE	TREBLE	LEVEL	 	RESTORE
-// 	2001 DR Z MAZ 38	MR Z 38	ON / BYPASS		GAIN	MASTER	CUT	BASS		MIDDLE	TREBLE	LEVEL	 	RESTORE
-// 	2008 Fender Supersonic	SUPER RVB	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	BRIGHT SW	BIAS	LEVEL	RESTORE
-// 	1967 Marshall JTM45	BRIT BLUES	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	1986 Matchless  DC30	MATCH	ON / BYPASS		GAIN	MASTER	CUT	BASS		TREBLE	LEVEL	 	 	RESTORE
-// 	Marshall JTM2000	BRIT 2000	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	Bognar Uberschall 	UBER 	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	BIAS	LEVEL	RESTORE
-// 	Aguilar Tone Hammer AMP	AGL	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		M FREQ	TREBLE	LEVEL	 	RESTORE
-// 	BASSMAN 100	BASSGUY	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	PRESENCE	LEVEL	 	RESTORE
-// 	NUX Melvin Lee Davis AMP	MLD	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		M FREQ	TREBLE	LEVEL	 	RESTORE
-// 	NUX OPTIMA AIR	OPTIMA AIR	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	LEVEL	 	 	RESTORE
-// 	NUX STAGEMAN ACOUSTIC	STAGEMAN	ON / BYPASS		GAIN	MASTER	BASS	MIDDLE		TREBLE	LEVEL	 	 	RESTORE
+// AMP models for MG-30 — 25 electric + 3 bass + 2 acoustic = 30 total
+// Reference: amp.rs device observations + effects.yaml
+//
+// Bypass CC: 3
+// All knob CCs are positional and shared across all amp models:
+//   CC22=GAIN  CC23=MASTER  CC24=BASS/CUT  CC25=MIDDLE/MID_FREQ
+//   CC26=TREBLE  CC27=PRESENCE/TONE/CUT  CC28=BIAS/BRIGHT_SW  CC29=LEVEL
+//
+// IDs are provisional — sequential 0x00..0x1D matching order in amp.rs comments.
+
+use std::{collections::HashMap, sync::LazyLock};
+
+use super::{EffectOption, Knob};
+
+fn knob(id: &'static str, title: &'static str, cc: u8) -> Knob<'static> {
+    Knob {
+        id,
+        title,
+        range_start: Some(0),
+        range_end: Some(100),
+        ctrl: cc,
+        current_value: None,
+    }
+}
+
+// CC number constants for amp knob positions
+const GAIN: u8 = 22;
+const MASTER: u8 = 23;
+const BASS: u8 = 24;
+const MIDDLE: u8 = 25;
+const TREBLE: u8 = 26;
+const PRESENCE: u8 = 27;
+const BIAS: u8 = 28;
+const LEVEL: u8 = 29;
+
+// Label aliases that reuse the same CC but with different names
+fn gain() -> Knob<'static> {
+    knob("gain", "GAIN", GAIN)
+}
+fn master() -> Knob<'static> {
+    knob("master", "MASTER", MASTER)
+}
+fn bass() -> Knob<'static> {
+    knob("bass", "BASS", BASS)
+}
+fn cut() -> Knob<'static> {
+    knob("cut", "CUT", BASS)
+} // same CC as bass
+fn middle() -> Knob<'static> {
+    knob("middle", "MIDDLE", MIDDLE)
+}
+fn mid_freq() -> Knob<'static> {
+    knob("mid_freq", "M FREQ", MIDDLE)
+} // same CC as middle
+fn treble() -> Knob<'static> {
+    knob("treble", "TREBLE", TREBLE)
+}
+fn presence() -> Knob<'static> {
+    knob("presence", "PRESENCE", PRESENCE)
+}
+fn tone_p() -> Knob<'static> {
+    knob("tone", "TONE", PRESENCE)
+} // same CC as presence
+fn bright() -> Knob<'static> {
+    knob("bright_sw", "BRIGHT SW", BIAS)
+} // same CC as bias
+fn bias() -> Knob<'static> {
+    knob("bias", "BIAS", BIAS)
+}
+fn level() -> Knob<'static> {
+    knob("level", "LEVEL", LEVEL)
+}
+
+/// MG-30 amp model catalog, keyed by model ID.
+pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+    HashMap::from([
+        // --- Electric / Clean ---
+        (
+            0x00,
+            EffectOption {
+                id: 0x00,
+                title: "Jazz Clean",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    bright(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x01,
+            EffectOption {
+                id: 0x01,
+                title: "Deluxe Rvb",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x02,
+            EffectOption {
+                id: 0x02,
+                title: "Bass Mate",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x03,
+            EffectOption {
+                id: 0x03,
+                title: "Tweedy",
+                knobs: vec![gain(), tone_p(), master(), level()],
+                ..Default::default()
+            },
+        ),
+        (
+            0x04,
+            EffectOption {
+                id: 0x04,
+                title: "Twin Rvb",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    bright(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        // --- Electric / Crunch ---
+        (
+            0x05,
+            EffectOption {
+                id: 0x05,
+                title: "Hiwire",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x06,
+            EffectOption {
+                id: 0x06,
+                title: "Cali Crunch",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x07,
+            EffectOption {
+                id: 0x07,
+                title: "Class A 15",
+                knobs: vec![gain(), master(), cut(), bass(), treble(), level()],
+                ..Default::default()
+            },
+        ),
+        (
+            0x08,
+            EffectOption {
+                id: 0x08,
+                title: "Class A 30",
+                knobs: vec![gain(), master(), cut(), bass(), treble(), level()],
+                ..Default::default()
+            },
+        ),
+        (
+            0x09,
+            EffectOption {
+                id: 0x09,
+                title: "Plexi 100W",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x0A,
+            EffectOption {
+                id: 0x0A,
+                title: "Plexi 45",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        // --- Electric / High Gain ---
+        (
+            0x0B,
+            EffectOption {
+                id: 0x0B,
+                title: "Brit 800",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x0C,
+            EffectOption {
+                id: 0x0C,
+                title: "1987X 50W",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x0D,
+            EffectOption {
+                id: 0x0D,
+                title: "SLO 100",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x0E,
+            EffectOption {
+                id: 0x0E,
+                title: "Fireman HBE",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x0F,
+            EffectOption {
+                id: 0x0F,
+                title: "Dual Rect",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x10,
+            EffectOption {
+                id: 0x10,
+                title: "Die VH4",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x11,
+            EffectOption {
+                id: 0x11,
+                title: "Vibro King",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x12,
+            EffectOption {
+                id: 0x12,
+                title: "Budda",
+                knobs: vec![gain(), master(), cut(), bass(), middle(), treble(), level()],
+                ..Default::default()
+            },
+        ),
+        (
+            0x13,
+            EffectOption {
+                id: 0x13,
+                title: "Mr Z 38",
+                knobs: vec![gain(), master(), cut(), bass(), middle(), treble(), level()],
+                ..Default::default()
+            },
+        ),
+        (
+            0x14,
+            EffectOption {
+                id: 0x14,
+                title: "Super Rvb",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    bright(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x15,
+            EffectOption {
+                id: 0x15,
+                title: "Brit Blues",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x16,
+            EffectOption {
+                id: 0x16,
+                title: "Match",
+                knobs: vec![gain(), master(), cut(), bass(), treble(), level()],
+                ..Default::default()
+            },
+        ),
+        (
+            0x17,
+            EffectOption {
+                id: 0x17,
+                title: "Brit 2000",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x18,
+            EffectOption {
+                id: 0x18,
+                title: "Uber",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    bias(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        // --- Bass ---
+        (
+            0x19,
+            EffectOption {
+                id: 0x19,
+                title: "AGL",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    mid_freq(),
+                    treble(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x1A,
+            EffectOption {
+                id: 0x1A,
+                title: "Bassguy",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    treble(),
+                    presence(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x1B,
+            EffectOption {
+                id: 0x1B,
+                title: "MLD",
+                knobs: vec![
+                    gain(),
+                    master(),
+                    bass(),
+                    middle(),
+                    mid_freq(),
+                    treble(),
+                    level(),
+                ],
+                ..Default::default()
+            },
+        ),
+        // --- Acoustic ---
+        (
+            0x1C,
+            EffectOption {
+                id: 0x1C,
+                title: "Optima Air",
+                knobs: vec![gain(), master(), bass(), middle(), treble(), level()],
+                ..Default::default()
+            },
+        ),
+        (
+            0x1D,
+            EffectOption {
+                id: 0x1D,
+                title: "Stageman",
+                knobs: vec![gain(), master(), bass(), middle(), treble(), level()],
+                ..Default::default()
+            },
+        ),
+    ])
+});

@@ -54,13 +54,15 @@ impl EffectCategory {
 
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct EffectOption<'a> {
-    // pub id: Option<String>,
+    /// Model ID as transmitted in SysEx messages.
+    /// IDs marked [confirmed] in effects.yaml are from hardware reverse-engineering.
+    /// IDs marked [provisional] are inferred from sequential ordering.
+    pub id: u8,
     pub title: &'a str,
     pub on_byte: u8,
     pub off_byte: u8,
     pub category_color: u32,
     pub knobs: Vec<Knob<'a>>,
-    // pub options: Vec<EffectOption>, // for dominant color?
     pub dominant_color: Option<u32>,
 }
 
