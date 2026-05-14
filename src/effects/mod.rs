@@ -13,7 +13,12 @@ pub mod reverb;
 pub mod volume;
 pub mod wah;
 
-#[derive(Default, Clone, PartialEq, Debug)]
+/// MIDI CC value that activates an effect slot (boolean true in MIDI).
+pub const CC_BYPASS_ON: u8 = 0x7F;
+/// MIDI CC value that bypasses an effect slot (boolean false in MIDI).
+pub const CC_BYPASS_OFF: u8 = 0x00;
+
+#[derive(Default, Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
 pub enum EffectCategory {
     Wah = 0,
@@ -32,6 +37,21 @@ pub enum EffectCategory {
 }
 
 impl EffectCategory {
+    /// Returns the MIDI CC number that controls the bypass state of this slot.
+    ///
+    /// The MG-30 maps each slot's bypass toggle to a CC equal to its discriminant
+    /// value (Wah=CC0, Comp=CC1, … Sr=CC10).  [`Vol`](EffectCategory::Vol) has
+    /// no bypass toggle and returns `None`.
+    ///
+    /// Use [`CC_BYPASS_ON`] (0x7F) to activate and [`CC_BYPASS_OFF`] (0x00) to
+    /// bypass the slot.  Send via [`MidiManager::send_cc`](crate::midi::MidiManager::send_cc).
+    pub fn bypass_cc(self) -> Option<u8> {
+        match self {
+            EffectCategory::Vol => None,
+            _ => Some(self as u8),
+        }
+    }
+
     /// Function to convert a u8 to EffectCategory
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
@@ -166,4 +186,45 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxErro
         }
     }
     Ok(effects)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bypass_cc_matches_discriminant() {
+        // Each non-Vol slot's bypass CC must equal its repr(u8) discriminant.
+        assert_eq!(EffectCategory::Wah.bypass_cc(), Some(0));
+        assert_eq!(EffectCategory::Comp.bypass_cc(), Some(1));
+        assert_eq!(EffectCategory::Efx.bypass_cc(), Some(2));
+        assert_eq!(EffectCategory::Amp.bypass_cc(), Some(3));
+        assert_eq!(EffectCategory::Eq.bypass_cc(), Some(4));
+        assert_eq!(EffectCategory::Gate.bypass_cc(), Some(5));
+        assert_eq!(EffectCategory::Mod.bypass_cc(), Some(6));
+        assert_eq!(EffectCategory::Delay.bypass_cc(), Some(7));
+        assert_eq!(EffectCategory::Reverb.bypass_cc(), Some(8));
+        assert_eq!(EffectCategory::Ir.bypass_cc(), Some(9));
+        assert_eq!(EffectCategory::Sr.bypass_cc(), Some(10));
+    }
+
+    #[test]
+    fn test_bypass_cc_vol_is_none() {
+        assert_eq!(EffectCategory::Vol.bypass_cc(), None);
+    }
+
+    #[test]
+    fn test_bypass_constants() {
+        assert_eq!(CC_BYPASS_ON, 0x7F);
+        assert_eq!(CC_BYPASS_OFF, 0x00);
+    }
+
+    #[test]
+    fn test_from_u8_roundtrip() {
+        for v in 0u8..=11 {
+            let cat = EffectCategory::from_u8(v).expect("all values 0–11 should be valid");
+            assert_eq!(cat as u8, v);
+        }
+        assert!(EffectCategory::from_u8(12).is_none());
+    }
 }

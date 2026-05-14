@@ -152,44 +152,41 @@ impl MidiManager {
         }
     }
 
-    // /// Send effect parameter change
-    // pub fn send_effect_parameter(
-    //     &mut self,
-    //     device_type: DeviceType,
-    //     effect_id: u8,
-    //     param_id: u8,
-    //     value: u8,
-    // ) -> Result<(), Box<dyn Error>> {
-    //     use crate::DeviceFactory;
-    //     let device = DeviceFactory::create_device(device_type);
+    /// Send a raw MIDI message directly to the connected output port.
+    ///
+    /// The caller is responsible for providing a valid MIDI message.
+    /// Use [`send_sysex`](MidiManager::send_sysex) for SysEx and
+    /// [`send_cc`](MidiManager::send_cc) for Control Change messages.
+    pub fn send_raw_midi(&mut self, msg: &[u8]) -> Result<(), Box<dyn Error>> {
+        match &mut self.connection_out {
+            Some(conn) => conn.send(msg).map_err(Into::into),
+            None => Err("No MIDI connection established".into()),
+        }
+    }
 
-    //     let mut sysex = device.sysex_header();
-    //     sysex.extend(&[
-    //         0x07, // Parameter change command
-    //         effect_id, param_id, value, 0xF7, // SysEx end
-    //     ]);
-
-    //     self.send_sysex(&sysex)
-    // }
-
-    // /// Send preset change command
-    // pub fn send_preset_change(
-    //     &mut self,
-    //     device_type: DeviceType,
-    //     preset_number: u8,
-    // ) -> Result<(), Box<dyn Error>> {
-    //     use crate::DeviceFactory;
-    //     let device = DeviceFactory::create_device(device_type);
-
-    //     let mut sysex = device.sysex_header();
-    //     sysex.extend(&[
-    //         0x01, // Preset change command
-    //         preset_number,
-    //         0xF7, // SysEx end
-    //     ]);
-
-    //     self.send_sysex(&sysex)
-    // }
+    /// Send a MIDI Control Change (CC) message on channel 1 (MIDI channel 0).
+    ///
+    /// Both `control` and `value` must be in the range 0–127 (MIDI 7-bit limit).
+    /// Returns [`crate::error::NuxError::CcValueOutOfRange`] if `value > 127`.
+    ///
+    /// # Example
+    /// ```no_run
+    /// // Set AMP GAIN (CC 22) to 80:
+    /// manager.send_cc(22, 80)?;
+    ///
+    /// // Bypass the WAH slot (CC 0, value 0 = off):
+    /// manager.send_cc(0, 0x00)?;
+    ///
+    /// // Enable the WAH slot (CC 0, value 127 = on):
+    /// manager.send_cc(0, 0x7F)?;
+    /// ```
+    pub fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+        if value > 127 {
+            return Err(crate::error::NuxError::CcValueOutOfRange(value).into());
+        }
+        // 0xB0 = Control Change on MIDI channel 1 (0-indexed channel 0)
+        self.send_raw_midi(&[0xB0, control, value])
+    }
 
     /// Disconnect from the current MIDI device
     pub fn disconnect(&mut self) {

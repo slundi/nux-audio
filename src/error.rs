@@ -36,4 +36,11 @@ pub enum NuxError {
 
     #[error("unknown model 0x{model_id:02X} for category 0x{category_byte:02X}")]
     UnknownEffectModel { category_byte: u8, model_id: u8 },
+
+    // ── MIDI CC ───────────────────────────────────────────────────────────────
+    #[error("CC value {0} exceeds MIDI maximum of 127")]
+    CcValueOutOfRange(u8),
+
+    #[error("effect slot {0:?} has no bypass CC (Vol slot has no bypass toggle)")]
+    NoBypassCc(String),
 }
