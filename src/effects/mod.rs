@@ -92,8 +92,53 @@ pub struct KnobState {
     pub value: u8,
 }
 
-pub fn extract_effects(response: &[u8]) -> Effect<'_> {
-    todo!()
+/// Parse a MG-30 `CURRENT_PRESET_BASIC` SysEx response into an `Effect`.
+///
+/// Expected response header: `[0xF0, 0x43, 0x58, 0x70, 0x15, 0x02, ...]`
+///
+/// Byte offsets are provisional and must be verified against hardware captures:
+///   `CATEGORY_OFFSET` — byte encoding the effect slot (maps to `EffectCategory`)
+///   `MODEL_ID_OFFSET` — byte encoding the selected model within that slot
+pub fn extract_effects(response: &[u8]) -> Result<Effect<'static>> {
+    // TODO: verify these offsets from hardware SysEx captures
+    const CATEGORY_OFFSET: usize = 6;
+    const MODEL_ID_OFFSET: usize = 7;
+
+    if response.len() <= MODEL_ID_OFFSET {
+        return Err(anyhow!(
+            "response too short: {} bytes (need at least {})",
+            response.len(),
+            MODEL_ID_OFFSET + 1
+        ));
+    }
+
+    let category_byte = response[CATEGORY_OFFSET];
+    let model_id = response[MODEL_ID_OFFSET];
+
+    let category = EffectCategory::from_u8(category_byte)
+        .ok_or_else(|| anyhow!("unknown effect category: 0x{:02X}", category_byte))?;
+
+    let option = match &category {
+        EffectCategory::Wah => wah::MODELS.get(&model_id),
+        EffectCategory::Comp => compression::MODELS.get(&model_id),
+        EffectCategory::Efx => efx::MODELS.get(&model_id),
+        EffectCategory::Amp => amp::MODELS.get(&model_id),
+        EffectCategory::Eq => equalizer::MODELS.get(&model_id),
+        EffectCategory::Gate => gate::MODELS.get(&model_id),
+        EffectCategory::Mod => modulation::MODELS.get(&model_id),
+        EffectCategory::Delay => delay::MODELS.get(&model_id),
+        EffectCategory::Reverb => reverb::MODELS.get(&model_id),
+        EffectCategory::Ir => ir::MODELS.get(&model_id),
+        // Vol/Sr have no model catalog — knobs are always available
+        EffectCategory::Vol | EffectCategory::Sr => None,
+    }
+    .ok_or_else(|| anyhow!("unknown model 0x{:02X} for {:?}", model_id, category))?;
+
+    Ok(Effect {
+        category,
+        options: vec![option.clone()],
+        ..Default::default()
+    })
 }
 
 pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>> {
