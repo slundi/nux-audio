@@ -90,6 +90,29 @@ impl EffectCategory {
     }
 }
 
+impl std::str::FromStr for EffectCategory {
+    type Err = ();
+
+    /// Case-insensitive parse from display name or common alias.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "wah" => Ok(Self::Wah),
+            "comp" | "compression" => Ok(Self::Comp),
+            "efx" => Ok(Self::Efx),
+            "amp" => Ok(Self::Amp),
+            "eq" | "equalizer" => Ok(Self::Eq),
+            "gate" => Ok(Self::Gate),
+            "mod" | "modulation" => Ok(Self::Mod),
+            "delay" => Ok(Self::Delay),
+            "reverb" => Ok(Self::Reverb),
+            "ir" => Ok(Self::Ir),
+            "sr" => Ok(Self::Sr),
+            "vol" | "volume" => Ok(Self::Vol),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct EffectOption<'a> {
     /// Model ID as transmitted in SysEx messages.
@@ -220,6 +243,37 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxErro
         }
     }
     Ok(effects)
+}
+
+/// Find the MIDI CC number for a knob by its `id` string within a category's model catalog.
+///
+/// Searches all models in the category and returns the first matching CC.  Within a slot,
+/// the same knob id always maps to the same CC number regardless of model, so the first
+/// match is authoritative.
+///
+/// Returns `None` when the category has no static catalog (`Vol`, `Sr`) or when no model
+/// in the catalog defines a knob with the given `id`.  In those cases the caller should
+/// ask the user to supply the CC number directly.
+pub fn find_cc_for_knob(category: EffectCategory, knob_id: &str) -> Option<u8> {
+    let models: &std::collections::HashMap<u8, EffectOption<'static>> = match category {
+        EffectCategory::Wah => &wah::MODELS,
+        EffectCategory::Comp => &compression::MODELS,
+        EffectCategory::Efx => &efx::MODELS,
+        EffectCategory::Amp => &amp::MODELS,
+        EffectCategory::Eq => &equalizer::MODELS,
+        EffectCategory::Gate => &gate::MODELS,
+        EffectCategory::Mod => &modulation::MODELS,
+        EffectCategory::Delay => &delay::MODELS,
+        EffectCategory::Reverb => &reverb::MODELS,
+        EffectCategory::Ir => &ir::MODELS,
+        EffectCategory::Vol | EffectCategory::Sr => return None,
+    };
+    for opt in models.values() {
+        if let Some(knob) = opt.knobs.iter().find(|k| k.id == knob_id) {
+            return Some(knob.ctrl);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -401,6 +455,54 @@ mod tests {
     fn test_ir_knob_ccs_in_range() {
         let ir_ccs: Vec<u8> = (64..=69).collect();
         assert_ccs_in_range(&ir::MODELS, "Ir", &ir_ccs);
+    }
+
+    #[test]
+    fn test_from_str_known_names() {
+        assert_eq!("amp".parse::<EffectCategory>(), Ok(EffectCategory::Amp));
+        assert_eq!("AMP".parse::<EffectCategory>(), Ok(EffectCategory::Amp));
+        assert_eq!(
+            "compression".parse::<EffectCategory>(),
+            Ok(EffectCategory::Comp)
+        );
+        assert_eq!(
+            "modulation".parse::<EffectCategory>(),
+            Ok(EffectCategory::Mod)
+        );
+        assert_eq!("volume".parse::<EffectCategory>(), Ok(EffectCategory::Vol));
+        assert!("unknown".parse::<EffectCategory>().is_err());
+    }
+
+    #[test]
+    fn test_find_cc_for_knob_amp_gain() {
+        // "gain" is the first amp knob — CC22 across all amp models that have it
+        let cc = find_cc_for_knob(EffectCategory::Amp, "gain");
+        assert!(cc.is_some());
+        assert!(
+            (22..=29).contains(&cc.unwrap()),
+            "amp gain should be CC22–29, got {:?}",
+            cc
+        );
+    }
+
+    #[test]
+    fn test_find_cc_for_knob_missing() {
+        assert_eq!(
+            find_cc_for_knob(EffectCategory::Amp, "nonexistent_knob"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_find_cc_for_knob_vol_sr_none() {
+        assert_eq!(find_cc_for_knob(EffectCategory::Vol, "volume"), None);
+        assert_eq!(find_cc_for_knob(EffectCategory::Sr, "level"), None);
+    }
+
+    #[test]
+    fn test_find_cc_for_knob_efx_sens() {
+        let cc = find_cc_for_knob(EffectCategory::Efx, "sens");
+        assert_eq!(cc, Some(17), "EFX sens should be CC17 (first EFX knob)");
     }
 
     /// as_str() must be non-empty and stable for every variant.

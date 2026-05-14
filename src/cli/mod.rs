@@ -96,11 +96,11 @@ impl Cli {
                     );
                 }
             },
-            Commands::Effect { effect, parameters } => {
-                println!("Controlling effect: {}", effect);
-                for param in parameters {
-                    println!("  Setting parameter: {}", param);
-                }
+            Commands::Effect {
+                ref effect,
+                ref parameters,
+            } => {
+                self.send_effect_cc(effect, parameters).await;
             }
             Commands::Raw {
                 ref data,
@@ -127,6 +127,137 @@ impl Cli {
     fn send_raw(self, data: &[u8]) {
         println!("Sending message: {:?} (replace with formated string", data);
         // TODO: get device
+    }
+
+    /// Detect the target device and return its (port_in, port_out) indices.
+    ///
+    /// Prints an error and returns `None` when no suitable device is found.
+    fn resolve_ports(&self) -> Option<(crate::device::Device, usize, usize)> {
+        use crate::device::Device;
+
+        let mut devices = Device::detect();
+
+        let device = if let Some(name) = &self.device_name {
+            let n = name.to_lowercase();
+            match devices
+                .iter()
+                .position(|d| d.name.to_lowercase().contains(&n) || d.model.to_lowercase() == n)
+            {
+                Some(i) => devices.swap_remove(i),
+                None => {
+                    eprintln!("Device '{name}' not found. Use `nux devices` to list ports.");
+                    return None;
+                }
+            }
+        } else {
+            match devices.len() {
+                0 => {
+                    eprintln!("No supported Nux device detected. Is the device connected?");
+                    return None;
+                }
+                1 => devices.swap_remove(0),
+                _ => {
+                    eprintln!(
+                        "Multiple devices found — specify one with -d <model>: {}",
+                        devices
+                            .iter()
+                            .map(|d| d.model.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    return None;
+                }
+            }
+        };
+
+        let port_in = match device.inputs.values().copied().next() {
+            Some(p) => p,
+            None => {
+                eprintln!("No MIDI input port for {}", device.model);
+                return None;
+            }
+        };
+        let port_out = match device.outputs.values().copied().next() {
+            Some(p) => p,
+            None => {
+                eprintln!("No MIDI output port for {}", device.model);
+                return None;
+            }
+        };
+
+        Some((device, port_in, port_out))
+    }
+
+    /// Send MIDI CC messages for knob parameters on the given effect category.
+    ///
+    /// Named knobs (e.g. "gain") are resolved to CC numbers via the static catalog.
+    /// Numeric knobs are treated as CC numbers directly.
+    async fn send_effect_cc(&self, effect: &str, parameters: &[EffectParameter]) {
+        use crate::effects::{EffectCategory, find_cc_for_knob};
+
+        let category = match effect.parse::<EffectCategory>() {
+            Ok(c) => c,
+            Err(()) => {
+                eprintln!(
+                    "Unknown effect category '{effect}'. \
+                     Try: wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir, vol"
+                );
+                return;
+            }
+        };
+
+        let (device, _port_in, port_out) = match self.resolve_ports() {
+            Some(t) => t,
+            None => return,
+        };
+
+        let mut manager = match MidiManager::new() {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Cannot create MIDI manager: {e}");
+                return;
+            }
+        };
+
+        if let Err(e) = manager.connect_output(port_out) {
+            eprintln!("Cannot connect to {}: {e}", device.model);
+            return;
+        }
+
+        let mut errors = 0usize;
+        for param in parameters {
+            let cc = match &param.knob {
+                KnobIdentifier::Id(n) => *n,
+                KnobIdentifier::Name(name) => match find_cc_for_knob(category, name.as_str()) {
+                    Some(cc) => cc,
+                    None => {
+                        eprintln!(
+                            "Knob '{name}' not found in {} catalog. \
+                             Use a CC number directly (e.g. 22=80).",
+                            category.as_str()
+                        );
+                        errors += 1;
+                        continue;
+                    }
+                },
+            };
+            match manager.send_cc(cc, param.value) {
+                Ok(()) => println!(
+                    "CC{cc}={} → {} ({})",
+                    param.value,
+                    category.as_str(),
+                    device.model
+                ),
+                Err(e) => {
+                    eprintln!("Failed to send CC{cc}={}: {e}", param.value);
+                    errors += 1;
+                }
+            }
+        }
+
+        if errors > 0 {
+            eprintln!("{errors} error(s) occurred");
+        }
     }
 
     async fn info(self) {

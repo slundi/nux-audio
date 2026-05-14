@@ -22,7 +22,7 @@
 ## Phase 4: Effect Control
 
 * [x] **Effect model catalog**: Full MG-30 static catalog complete — wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir, vol (100+ models with correct CC assignments).
-* [ ] **CC send**: Wire `KnobDef.ctrl` to actual MIDI CC messages for real-time knob control.
+* [x] **CC send**: `nux effect <category> <knob>=<value>` sends MIDI CC in real time. Named knobs resolved via catalog (`EffectCategory` impl `FromStr`; `find_cc_for_knob`). Numeric knobs treated as direct CC numbers. `MidiManager::connect_output` added for send-only connections.
 * [ ] **Bypass toggle**: Send bypass CC per slot (CC numbers documented in each effect file header).
 * [ ] **Model switch**: Send SysEx to change active model within a slot.
 

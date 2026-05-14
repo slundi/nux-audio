@@ -179,6 +179,19 @@ impl MidiManager {
         Ok(MidiDispatcher::new(tx))
     }
 
+    /// Connect to a MIDI output port only (for send-only operations like CC messages).
+    pub fn connect_output(&mut self, port_out: usize) -> Result<(), Box<dyn Error>> {
+        let ports_out = self.output.ports();
+        if port_out >= ports_out.len() {
+            return Err("Output port index out of range".into());
+        }
+        let port = &ports_out[port_out];
+        let port_name = self.output.port_name(port)?;
+        let output = MidiOutput::new("NUX Audio MIDI Output")?;
+        self.connection_out = Some(output.connect(port, &format!("nux-audio-{port_name}"))?);
+        Ok(())
+    }
+
     /// Send SysEx data to the connected device
     pub fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
         let mut buffer = Vec::with_capacity(data.len() + 3);
