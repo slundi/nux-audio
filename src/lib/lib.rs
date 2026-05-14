@@ -1,18 +1,8 @@
-// // Main NUX Audio Effects Library
-// use std::collections::HashMap;
-
-pub mod devices;
-// pub mod effects;
 pub mod midi;
 pub mod nux_sys_ex_commands;
-pub mod poc;
-// pub mod presets;
 pub mod string;
 
-// pub use effects::*;
 pub use midi::*;
-pub use poc::*;
-// pub use presets::*;
 
 // /// Main trait for all NUX audio effects
 // pub trait Effect: std::fmt::Debug + Clone{
