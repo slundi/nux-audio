@@ -174,10 +174,12 @@ devices:
     effects_count: 60
     form_factor: "multi_effects"
 
-evice_families:
+device_families:
   # Famille Mighty Basic (Plug + Air) - Spécifications identiques
   mighty_basic_family:
     models: ["mighty_plug", "mighty_air"]
+    # Effect slots in signal chain order (no efx/vol slot on basic family)
+    signal_chain: [gate, comp, amp, ir, eq, mod, delay, reverb]
     shared_elements:
       preset_count: 7
       amp_models: 13
@@ -205,6 +207,8 @@ evice_families:
   # Famille Mighty Pro (Pro + Space) - Architecture avancée
   mighty_pro_family:
     models: ["mighty_plug_pro", "mighty_space"]
+    # Effect slots in signal chain order
+    signal_chain: [gate, comp, efx, amp, ir, eq, mod, delay, reverb, vol]
     shared_elements:
       preset_count: 7
       amp_models: 20
@@ -240,6 +244,8 @@ evice_families:
   # Famille Mighty MKII Desktop
   mighty_mkii_family:
     models: ["mighty_8_bt", "mighty_20_bt", "mighty_40_bt", "mighty_60_bt"]
+    # Effect slots in signal chain order
+    signal_chain: [gate, comp, efx, amp, ir, eq, mod, delay, reverb]
     shared_elements:
       preset_count: 8
       form_factor: "combo_amp"
@@ -279,6 +285,9 @@ evice_families:
   # Famille MG Multi-Effects
   mg_family:
     models: ["mg_30", "mg_101", "mg_300", "mg_300_mk2", "mg_400"]
+    # Effect slots in signal chain order — matches mg30 keys in effects.yaml
+    # Other MG models may differ; verify per device before sending SysEx
+    signal_chain: [wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir, vol]
     shared_elements:
       form_factor: "multi_effects"
       usb_interface: true
