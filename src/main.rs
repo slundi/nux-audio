@@ -4,6 +4,7 @@ use std::fs::OpenOptions;
 pub mod cli;
 pub mod device;
 pub mod effects;
+pub mod error;
 pub mod midi;
 pub mod preset;
 pub mod registry;

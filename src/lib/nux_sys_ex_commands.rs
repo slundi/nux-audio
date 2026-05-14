@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use crate::error::NuxAudioError;
 
 // SysEx messages are starting with:
 // * 0xf0 start sysex
@@ -29,11 +29,9 @@ use anyhow::{anyhow, Result};
 //   return command;
 // };
 
-pub fn change_scene(number: u8) -> Result<[u8; 3]> {
+pub fn change_scene(number: u8) -> Result<[u8; 3], NuxAudioError> {
     if !(1..=3).contains(&number) {
-        return Err(anyhow!(
-            "Invalid scene number '{number}'. It must be between 1 and 3"
-        ));
+        return Err(NuxAudioError::InvalidSceneNumber(number));
     }
     Ok([176, 79, number])
 }
@@ -63,27 +61,22 @@ pub fn build_sysex_message(message: &[u8]) -> Vec<u8> {
     result
 }
 
-pub fn extract_sysex_message(message: &[u8]) -> Result<&[u8]> {
+pub fn extract_sysex_message(message: &[u8]) -> Result<&[u8], NuxAudioError> {
     if message.is_empty() {
-        return Err(anyhow!("Empty message"));
+        return Err(NuxAudioError::SysExEmpty);
     }
 
     if message[0] != 0xf0 || message[message.len() - 1] != 0xf7 {
-        return Err(anyhow!("Not a SysEx message"));
+        return Err(NuxAudioError::SysExInvalidFraming);
     }
 
-    // SysEx messages are starting with 0xf0 and ends with 0xf7
-    // println!(" Raw MIDI SysEx message ({} bytes): {:?}", message.len(), message);
-
     if message.len() < 3 {
-        return Err(anyhow!("SysEx message too short"));
+        return Err(NuxAudioError::SysExTooShort);
     }
 
     // let manufacturer_id = message[1];
     let data = &message[2..message.len() - 1]; // exclude f0, f7 & manufacturer ID
     Ok(data)
-    // println!("  Manufacturer ID (simplified) : 0x{:X}", manufacturer_id);
-    // println!("  Useful data (simplified) : {:?}", data);
 }
 
 #[cfg(test)]

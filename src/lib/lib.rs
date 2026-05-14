@@ -1,3 +1,4 @@
+pub mod error;
 pub mod midi;
 pub mod nux_sys_ex_commands;
 pub mod string;

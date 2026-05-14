@@ -1,17 +1,22 @@
 //! String utilities
 
-use anyhow::Error;
+use crate::error::NuxAudioError;
 
 /// Convert a string containing hex chars into a `Vec<u8>`.
 /// Input string examples: `0bf043` or `0b f0 43`
-pub fn hex_string_to_vec_u8(s: &str) -> Result<Vec<u8>, Error> {
+pub fn hex_string_to_vec_u8(s: &str) -> Result<Vec<u8>, NuxAudioError> {
     let s = s.replace(" ", "");
     if s.len() % 2 == 1 {
-        return Err(Error::msg("Invalid length"));
+        return Err(NuxAudioError::OddLengthHex(s.len()));
     }
     let mut bytes = Vec::new();
     for i in (0..s.len()).step_by(2) {
-        let byte = u8::from_str_radix(&s[i..i + 2], 16)?;
+        let chunk = &s[i..i + 2];
+        let byte =
+            u8::from_str_radix(chunk, 16).map_err(|source| NuxAudioError::InvalidHexDigit {
+                chunk: chunk.to_string(),
+                source,
+            })?;
         bytes.push(byte);
     }
     Ok(bytes)

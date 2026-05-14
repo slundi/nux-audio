@@ -1,5 +1,5 @@
+use crate::error::NuxError;
 use crate::preset::Preset;
-use anyhow::{anyhow, Result};
 use log::error;
 use midir::{MidiInput, MidiOutput};
 use std::collections::HashMap;
@@ -152,9 +152,9 @@ pub struct ControllerState<'a> {
 }
 
 /// Extract version string from a SysEx response. SysEx framing bytes must have been removed.
-pub fn extract_version(response: &[u8]) -> Result<String> {
+pub fn extract_version(response: &[u8]) -> Result<String, NuxError> {
     if response.len() < 6 {
-        return Err(anyhow!("Unexpected SysEx response length: {:?}", response));
+        return Err(NuxError::ResponseTooShort(response.len()));
     }
     let version_bytes = &response[4..response.len() - 1];
     let version = String::from_utf8(version_bytes.to_vec())?;
@@ -164,7 +164,7 @@ pub fn extract_version(response: &[u8]) -> Result<String> {
     if let Some(value) = version.split_once("MG-30") {
         return Ok(crate::utils::clean_string(value.0));
     }
-    Err(anyhow!("Cannot get version from value {version}"))
+    Err(NuxError::VersionParse(version))
 }
 
 #[cfg(test)]

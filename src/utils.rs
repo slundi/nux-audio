@@ -1,22 +1,20 @@
-use anyhow::{anyhow, Result};
+use crate::error::NuxError;
 
-pub fn hex_to_bytes(hex_string: &str) -> Result<Vec<u8>> {
+pub fn hex_to_bytes(hex_string: &str) -> Result<Vec<u8>, NuxError> {
     if !hex_string.len().is_multiple_of(2) {
-        return Err(anyhow!(
-            "Hex string must have an even number of characters, but got length {}",
-            hex_string.len()
-        ));
+        return Err(NuxError::OddLengthHex(hex_string.len()));
     }
 
-    hex_string
-        .as_bytes()
-        .chunks_exact(2)
-        .map(|chunk| {
-            let hex_str = std::str::from_utf8(chunk)?; // `?` propagates Utf8Error directly
-            u8::from_str_radix(hex_str, 16)
-                .map_err(|e| anyhow!("Invalid hex digit in '{}': {}", hex_str, e))
+    (0..hex_string.len())
+        .step_by(2)
+        .map(|i| {
+            let chunk = &hex_string[i..i + 2];
+            u8::from_str_radix(chunk, 16).map_err(|source| NuxError::InvalidHexDigit {
+                chunk: chunk.to_string(),
+                source,
+            })
         })
-        .collect::<Result<Vec<u8>>>()
+        .collect()
 }
 
 pub fn unit_hex_to_bytes(response: &[u8]) -> Vec<String> {

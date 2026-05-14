@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use crate::error::NuxError;
 
 pub mod amp;
 pub mod compression;
@@ -99,24 +99,23 @@ pub struct KnobState {
 /// Byte offsets are provisional and must be verified against hardware captures:
 ///   `CATEGORY_OFFSET` — byte encoding the effect slot (maps to `EffectCategory`)
 ///   `MODEL_ID_OFFSET` — byte encoding the selected model within that slot
-pub fn extract_effects(response: &[u8]) -> Result<Effect<'static>> {
+pub fn extract_effects(response: &[u8]) -> Result<Effect<'static>, NuxError> {
     // TODO: verify these offsets from hardware SysEx captures
     const CATEGORY_OFFSET: usize = 6;
     const MODEL_ID_OFFSET: usize = 7;
 
     if response.len() <= MODEL_ID_OFFSET {
-        return Err(anyhow!(
-            "response too short: {} bytes (need at least {})",
-            response.len(),
-            MODEL_ID_OFFSET + 1
-        ));
+        return Err(NuxError::EffectResponseTooShort {
+            expected: MODEL_ID_OFFSET + 1,
+            actual: response.len(),
+        });
     }
 
     let category_byte = response[CATEGORY_OFFSET];
     let model_id = response[MODEL_ID_OFFSET];
 
     let category = EffectCategory::from_u8(category_byte)
-        .ok_or_else(|| anyhow!("unknown effect category: 0x{:02X}", category_byte))?;
+        .ok_or(NuxError::UnknownEffectCategory(category_byte))?;
 
     let option = match &category {
         EffectCategory::Wah => wah::MODELS.get(&model_id),
@@ -132,7 +131,10 @@ pub fn extract_effects(response: &[u8]) -> Result<Effect<'static>> {
         // Vol/Sr have no model catalog — knobs are always available
         EffectCategory::Vol | EffectCategory::Sr => None,
     }
-    .ok_or_else(|| anyhow!("unknown model 0x{:02X} for {:?}", model_id, category))?;
+    .ok_or(NuxError::UnknownEffectModel {
+        category_byte,
+        model_id,
+    })?;
 
     Ok(Effect {
         category,
@@ -141,7 +143,7 @@ pub fn extract_effects(response: &[u8]) -> Result<Effect<'static>> {
     })
 }
 
-pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>> {
+pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxError> {
     let sliced = &data[147..165];
     let mut effects: Vec<EffectCategory> = Vec::with_capacity(11);
     let mut i = 0usize;
@@ -150,7 +152,7 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>> {
             // Process single byte (like 1st, 4th, 7th, etc.)
             match EffectCategory::from_u8(data[i]) {
                 Some(ec) => effects.push(ec),
-                None => return Err(anyhow!("Cannot get effect category with {}", data[i])),
+                None => return Err(NuxError::UnknownEffectCategory(data[i])),
             }
             i += 1; // Move to the next index
         } else {
@@ -158,7 +160,7 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>> {
             let combined = u16::from_be_bytes([sliced[i], sliced[i + 1]]) / 2;
             match EffectCategory::from_u8(combined as u8) {
                 Some(ec) => effects.push(ec),
-                None => return Err(anyhow!("Cannot get effect category with {}", combined)), // Unknown
+                None => return Err(NuxError::UnknownEffectCategory(combined as u8)),
             }
             i += 2; // Move forward by 2 to process the next pair of bytes
         }
