@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 // NUX Device definitions and mappings
-use crate::{poc::{Effect, MidiCommand, Preset}, SYSEX_END, SYSEX_START};
+use crate::{
+    poc::{Effect, MidiCommand, Preset},
+    SYSEX_END, SYSEX_START,
+};
 
 pub const NUX_MANUFACTURER_ID: [u8; 3] = [0x00, 0x21, 0x21];
 

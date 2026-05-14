@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use super::{
-    BaseNuxDevice, DeviceInfo, DeviceModel, NuxDevice, MIGHTY_PLUG_PRO_DEVICE_ID,
-};
+use super::{BaseNuxDevice, DeviceInfo, DeviceModel, NuxDevice, MIGHTY_PLUG_PRO_DEVICE_ID};
 use crate::poc::{Effect, EffectParameter, EffectType, MidiCommand, Preset};
 
 #[derive(Debug, Clone)]

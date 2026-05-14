@@ -3,15 +3,15 @@
 
 pub mod devices;
 // pub mod effects;
-pub mod poc;
 pub mod midi;
 pub mod nux_sys_ex_commands;
+pub mod poc;
 // pub mod presets;
 pub mod string;
 
 // pub use effects::*;
-pub use poc::*;
 pub use midi::*;
+pub use poc::*;
 // pub use presets::*;
 
 // /// Main trait for all NUX audio effects

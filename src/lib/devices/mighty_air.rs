@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::{BaseNuxDevice, DeviceInfo, DeviceModel, NuxDevice, MIGHTY_AIR_DEVICE_ID};
-use crate::{poc::{Effect, EffectParameter, EffectType, MidiCommand, Preset}};
+use crate::poc::{Effect, EffectParameter, EffectType, MidiCommand, Preset};
 
 #[derive(Debug, Clone)]
 pub struct MightyAir {

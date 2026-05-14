@@ -13,10 +13,18 @@ pub fn list() -> Vec<Port> {
         Ok(manager) => {
             // TODO: filter NUX devices from name
             for (port, name) in manager.list_output_ports() {
-                ports.push(Port {port, name, is_output: true});
+                ports.push(Port {
+                    port,
+                    name,
+                    is_output: true,
+                });
             }
             for (port, name) in manager.list_input_ports() {
-                ports.push(Port {port, name, is_output: false});
+                ports.push(Port {
+                    port,
+                    name,
+                    is_output: false,
+                });
             }
         }
         Err(e) => {
