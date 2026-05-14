@@ -146,7 +146,7 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>> {
     let mut effects: Vec<EffectCategory> = Vec::with_capacity(11);
     let mut i = 0usize;
     while i < sliced.len() {
-        if (i % 3) == 0 {
+        if i.is_multiple_of(3) {
             // Process single byte (like 1st, 4th, 7th, etc.)
             match EffectCategory::from_u8(data[i]) {
                 Some(ec) => effects.push(ec),

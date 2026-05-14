@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 
 pub fn hex_to_bytes(hex_string: &str) -> Result<Vec<u8>> {
-    if hex_string.len() % 2 != 0 {
+    if !hex_string.len().is_multiple_of(2) {
         return Err(anyhow!(
             "Hex string must have an even number of characters, but got length {}",
             hex_string.len()
