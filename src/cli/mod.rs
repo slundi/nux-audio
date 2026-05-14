@@ -102,6 +102,12 @@ impl Cli {
             } => {
                 self.send_effect_cc(effect, parameters).await;
             }
+            Commands::Bypass {
+                ref category,
+                state,
+            } => {
+                self.send_bypass_cc(category, state).await;
+            }
             Commands::Raw {
                 ref data,
                 decimal,
@@ -260,6 +266,70 @@ impl Cli {
         }
     }
 
+    /// Send the bypass CC for an effect slot.
+    ///
+    /// `state = On` → CC value `0x7F` (slot active)
+    /// `state = Off` → CC value `0x00` (slot bypassed)
+    async fn send_bypass_cc(&self, category_str: &str, state: BypassState) {
+        use crate::effects::{CC_BYPASS_OFF, CC_BYPASS_ON, EffectCategory};
+
+        let category = match category_str.parse::<EffectCategory>() {
+            Ok(c) => c,
+            Err(()) => {
+                eprintln!(
+                    "Unknown effect category '{category_str}'. \
+                     Try: wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir"
+                );
+                return;
+            }
+        };
+
+        let cc = match category.bypass_cc() {
+            Some(cc) => cc,
+            None => {
+                eprintln!("The '{}' slot has no bypass toggle.", category.as_str());
+                return;
+            }
+        };
+
+        let (device, _port_in, port_out) = match self.resolve_ports() {
+            Some(t) => t,
+            None => return,
+        };
+
+        let mut manager = match MidiManager::new() {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Cannot create MIDI manager: {e}");
+                return;
+            }
+        };
+
+        if let Err(e) = manager.connect_output(port_out) {
+            eprintln!("Cannot connect to {}: {e}", device.model);
+            return;
+        }
+
+        let value = match state {
+            BypassState::On => CC_BYPASS_ON,
+            BypassState::Off => CC_BYPASS_OFF,
+        };
+
+        match manager.send_cc(cc, value) {
+            Ok(()) => println!(
+                "{} {} → CC{cc}=0x{value:02X} ({})",
+                category.as_str(),
+                if state == BypassState::On {
+                    "ON"
+                } else {
+                    "OFF"
+                },
+                device.model
+            ),
+            Err(e) => eprintln!("Failed to send bypass CC: {e}"),
+        }
+    }
+
     async fn info(self) {
         use crate::device::{Device, extract_version};
         use crate::registry::REGISTRY;
@@ -397,6 +467,19 @@ pub enum Commands {
         parameters: Vec<EffectParameter>,
     },
 
+    /// Toggle the bypass state of an effect slot
+    ///
+    /// Example: nux bypass amp on
+    ///          nux bypass reverb off
+    Bypass {
+        /// Effect slot name (wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir)
+        category: String,
+
+        /// Desired state: "on" to activate, "off" to bypass
+        #[arg(value_parser = parse_bypass_state)]
+        state: BypassState,
+    },
+
     /// Send raw SysEx data, you do not need to give the start and end bytes.
     Raw {
         /// Hex string with space or not or decimal string with spaces
@@ -491,6 +574,21 @@ fn parse_effect_parameters(s: &str) -> Result<EffectParameter, String> {
     })?;
 
     Ok(EffectParameter { knob, value })
+}
+
+/// Whether to activate or bypass an effect slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BypassState {
+    On,
+    Off,
+}
+
+fn parse_bypass_state(s: &str) -> Result<BypassState, String> {
+    match s.to_lowercase().as_str() {
+        "on" | "1" | "true" | "enable" => Ok(BypassState::On),
+        "off" | "0" | "false" | "disable" => Ok(BypassState::Off),
+        _ => Err(format!("Expected 'on' or 'off', got '{s}'")),
+    }
 }
 
 /// Utility function to process effect parameters from command line string
@@ -615,5 +713,41 @@ mod tests {
         let result = parse_effect_parameters("gain=invalid");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid value"));
+    }
+
+    #[test]
+    fn test_bypass_on_command() {
+        let args = ["guitar-fx", "bypass", "amp", "on"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        if let Commands::Bypass { category, state } = cli.command {
+            assert_eq!(category, "amp");
+            assert_eq!(state, BypassState::On);
+        } else {
+            panic!("Expected bypass command");
+        }
+    }
+
+    #[test]
+    fn test_bypass_off_command() {
+        let args = ["guitar-fx", "bypass", "reverb", "off"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        if let Commands::Bypass { category, state } = cli.command {
+            assert_eq!(category, "reverb");
+            assert_eq!(state, BypassState::Off);
+        } else {
+            panic!("Expected bypass command");
+        }
+    }
+
+    #[test]
+    fn test_parse_bypass_state_variants() {
+        assert_eq!(parse_bypass_state("on"), Ok(BypassState::On));
+        assert_eq!(parse_bypass_state("ON"), Ok(BypassState::On));
+        assert_eq!(parse_bypass_state("1"), Ok(BypassState::On));
+        assert_eq!(parse_bypass_state("enable"), Ok(BypassState::On));
+        assert_eq!(parse_bypass_state("off"), Ok(BypassState::Off));
+        assert_eq!(parse_bypass_state("0"), Ok(BypassState::Off));
+        assert_eq!(parse_bypass_state("disable"), Ok(BypassState::Off));
+        assert!(parse_bypass_state("maybe").is_err());
     }
 }
