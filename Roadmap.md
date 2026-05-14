@@ -15,7 +15,7 @@
 
 ## Phase 3: Preset Management
 
-* [~] **Preset Fetcher**: `extract_current_preset_basic_data()` parses preset number and scene from the basic response. `extract_effects()` routes a SysEx response to the correct `EffectOption` from static catalogs (skeleton). `extract_effects_order()` and `extract_name()` implemented. Detail parsing (tempo, parallel, full effects) not yet complete.
+* [x] **Preset Fetcher**: All parsers now return `Result` with `NuxError` bounds checks (no panics). `extract_current_preset_basic_data()` parses preset number and active scene. `extract_current_preset_detail_data()` parses tempo (ms/beat), parallel blend, effect signal-chain order, preset name, and three scene bypass snapshots. `extract_effects_order()` bug fixed (`sliced[i]` instead of `data[i]`). `extract_name()` bounds-safe 3-byte pair decoder. `SceneSnapshot([u8; 3])` added to `Preset`. Per-slot effect model IDs in the detail response require hardware captures to confirm offsets.
 * [ ] **Bulk Operations**: Listing and downloading all presets not implemented.
 * [ ] **Serialization**: Export/import format (YAML/JSON) not implemented.
 

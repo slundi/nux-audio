@@ -163,26 +163,42 @@ pub fn extract_effects(response: &[u8]) -> Result<Effect<'static>, NuxError> {
     })
 }
 
+/// Parse the MG-30 signal-chain order from a full detail SysEx response.
+///
+/// The device encodes 11 effect slot IDs into bytes 147–164 of the response
+/// using a 3-byte group format:
+///   - byte at offset `3k`     → single category value
+///   - bytes at offset `3k+1,3k+2` → big-endian u16 divided by 2 → category value
+///
+/// Requires the full (unstripped) SysEx response including the `F0 43` header.
 pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxError> {
-    let sliced = &data[147..165];
+    const SLICE_START: usize = 147;
+    const SLICE_END: usize = 165;
+    if data.len() < SLICE_END {
+        return Err(NuxError::EffectResponseTooShort {
+            expected: SLICE_END,
+            actual: data.len(),
+        });
+    }
+    let sliced = &data[SLICE_START..SLICE_END];
     let mut effects: Vec<EffectCategory> = Vec::with_capacity(11);
     let mut i = 0usize;
     while i < sliced.len() {
         if i.is_multiple_of(3) {
-            // Process single byte (like 1st, 4th, 7th, etc.)
-            match EffectCategory::from_u8(data[i]) {
+            // Single-byte slot at positions 0, 3, 6, 9, 12, 15
+            match EffectCategory::from_u8(sliced[i]) {
                 Some(ec) => effects.push(ec),
-                None => return Err(NuxError::UnknownEffectCategory(data[i])),
+                None => return Err(NuxError::UnknownEffectCategory(sliced[i])),
             }
-            i += 1; // Move to the next index
+            i += 1;
         } else {
-            // Process byte pair (like 2nd and 3rd, 5th and 6th, etc.)
+            // Two-byte slot at positions 1-2, 4-5, 7-8, 10-11, 13-14, 16-17
             let combined = u16::from_be_bytes([sliced[i], sliced[i + 1]]) / 2;
             match EffectCategory::from_u8(combined as u8) {
                 Some(ec) => effects.push(ec),
                 None => return Err(NuxError::UnknownEffectCategory(combined as u8)),
             }
-            i += 2; // Move forward by 2 to process the next pair of bytes
+            i += 2;
         }
     }
     Ok(effects)
