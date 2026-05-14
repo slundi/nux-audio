@@ -187,17 +187,17 @@ categories_v2:
       - name: M2 - 4/4 8th
         value: 1
       - name: M3 - 4/4 16th
-        values: 2
+        value: 2
       - name: M4 - 4/4 2nd Tri
-        values: 3
+        value: 3
       - name: M5 - 4/4 4th Tri
-        values: 4
+        value: 4
       - name: M6 - 4/4 8th Tri
-        values: 5
+        value: 5
       - name: M7 - 3/4 4th
-        values: 6
+        value: 6
       - name: M8 - 3/4 8th
-        values: 7
+        value: 7
   - name: Rock
     styles:
       - name: Standard
