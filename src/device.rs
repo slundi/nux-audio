@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 /// Manufacturer list.
 ///
-/// When implementing other device, same manufacturer will probably share some attributes and methods.
+/// When implementing other devices, same manufacturer will probably share some attributes and methods.
 #[repr(u8)]
 #[derive(Debug, PartialEq)]
 pub enum Manufacturer {
@@ -19,6 +19,8 @@ pub struct Device {
     pub model: String,
     /// The inferred name of the MIDI device.
     pub name: String,
+    /// Device ID used in SysEx messages — matches `device_id` in devices.yaml.
+    pub device_id: u8,
     /// A map of input port names to their `midir` indices.
     pub inputs: HashMap<String, usize>,
     /// A map of output port names to their `midir` indices.
@@ -66,15 +68,41 @@ impl Device {
         name.trim().to_string()
     }
 
-    /// Extract supported device from the MIDI device name
-    fn extract_supported(value: &str) -> Option<(Manufacturer, String)> {
+    /// Match a cleaned device name against known Nux devices.
+    ///
+    /// Returns `(Manufacturer, model_code, device_id)` on a match.
+    /// The `device_id` corresponds to the value in `devices.yaml` and is used in SysEx headers.
+    ///
+    /// # Port name patterns
+    /// - MG-30 pattern is confirmed from hardware.
+    /// - Mighty series patterns are provisional — verify with physical devices and
+    ///   update if the OS reports a different port name.
+    fn extract_supported(value: &str) -> Option<(Manufacturer, String, u8)> {
+        // MG-30 — confirmed
         if value.starts_with("NUX MG-30") {
-            return Some((Manufacturer::Nux, "MG-30".to_string()));
+            return Some((Manufacturer::Nux, "MG-30".to_string(), 0x09));
+        }
+        // Mighty Pro must be checked before Mighty Plug to avoid prefix collision.
+        if value.starts_with("NUX Mighty Plug Pro") {
+            return Some((Manufacturer::Nux, "MP-3".to_string(), 0x03));
+        }
+        if value.starts_with("NUX Mighty Space") {
+            return Some((Manufacturer::Nux, "MS-1".to_string(), 0x04));
+        }
+        // Mighty Basic — after Pro check
+        if value.starts_with("NUX Mighty Plug") {
+            return Some((Manufacturer::Nux, "MP-2".to_string(), 0x01));
+        }
+        if value.starts_with("NUX Mighty Air") {
+            return Some((Manufacturer::Nux, "MA-1".to_string(), 0x02));
+        }
+        if value.starts_with("NUX Mighty Lite") {
+            return Some((Manufacturer::Nux, "ML-2".to_string(), 0x05));
         }
         None
     }
 
-    /// Detect supported device(s) and return a list of available device with their MIDI ports.
+    /// Detect supported device(s) and return a list of available devices with their MIDI ports.
     pub fn detect() -> Vec<Self> {
         let midi_in =
             MidiInput::new("MIDI Input Lister").expect("Cannot create a MIDI input lister");
@@ -87,17 +115,16 @@ impl Device {
         for (i, p) in midi_in.ports().iter().enumerate() {
             match midi_in.port_name(p) {
                 Ok(port_name) => {
-                    // println!("{}: {}", i, port_name);
-
-                    // Attempt to extract a "generic" device name from the port name.
-                    // This is the trickiest part and depends on system naming conventions.
                     let device_name = Self::extract_device_name(&port_name);
-                    if let Some((manufacturer, model)) = Self::extract_supported(&device_name) {
+                    if let Some((manufacturer, model, device_id)) =
+                        Self::extract_supported(&device_name)
+                    {
                         let device_entry =
                             devices.entry(device_name.clone()).or_insert_with(|| Self {
                                 manufacturer,
                                 model,
                                 name: device_name,
+                                device_id,
                                 inputs: HashMap::new(),
                                 outputs: HashMap::new(),
                             });
@@ -112,16 +139,16 @@ impl Device {
         for (i, p) in midi_out.ports().iter().enumerate() {
             match midi_out.port_name(p) {
                 Ok(port_name) => {
-                    // println!("{}: {}", i, port_name);
-
                     let device_name = Self::extract_device_name(&port_name);
-
-                    if let Some((manufacturer, model)) = Self::extract_supported(&device_name) {
+                    if let Some((manufacturer, model, device_id)) =
+                        Self::extract_supported(&device_name)
+                    {
                         let device_entry =
                             devices.entry(device_name.clone()).or_insert_with(|| Self {
                                 manufacturer,
                                 model,
                                 name: device_name.to_owned(),
+                                device_id,
                                 inputs: HashMap::new(),
                                 outputs: HashMap::new(),
                             });
@@ -139,17 +166,14 @@ impl Device {
 pub struct ControllerState<'a> {
     pub device: Device,
     pub device_connected: bool,
+    /// Firmware version as a semver tuple — parse from `extract_version` with `semver_to_tuple`.
     pub device_version: (u8, u8, u8),
-    // current_preset_data,
-    // selected_effect_option,
-    // midi_output: Option<MidiOutput>,
-    // midi_input: Option<MidiInput>,
     pub active: bool,
     pub presets: Vec<Preset<'a>>,
     pub is_fetching_preset: bool,
 }
 
-/// Extract version from message. SysEx bytes must have been removed.
+/// Extract version string from a SysEx response. SysEx framing bytes must have been removed.
 pub fn extract_version(response: &[u8]) -> Result<String> {
     if response.len() < 6 {
         return Err(anyhow!("Unexpected SysEx response length: {:?}", response));
@@ -306,13 +330,39 @@ mod tests {
         assert_eq!(Device::extract_supported("unsupported"), None);
         assert_eq!(Device::extract_supported("not NUX MG-30"), None);
         assert_eq!(Device::extract_supported("NUX MG30"), None);
+
+        // MG-30
         assert_eq!(
             Device::extract_supported("NUX MG-30"),
-            Some((Manufacturer::Nux, String::from("MG-30")))
+            Some((Manufacturer::Nux, String::from("MG-30"), 0x09))
         );
         assert_eq!(
             Device::extract_supported("NUX MG-30 123ABC"),
-            Some((Manufacturer::Nux, String::from("MG-30")))
+            Some((Manufacturer::Nux, String::from("MG-30"), 0x09))
+        );
+
+        // Mighty Pro must not match as Mighty Plug (prefix ordering)
+        assert_eq!(
+            Device::extract_supported("NUX Mighty Plug Pro"),
+            Some((Manufacturer::Nux, String::from("MP-3"), 0x03))
+        );
+        assert_eq!(
+            Device::extract_supported("NUX Mighty Space"),
+            Some((Manufacturer::Nux, String::from("MS-1"), 0x04))
+        );
+
+        // Mighty Basic
+        assert_eq!(
+            Device::extract_supported("NUX Mighty Plug"),
+            Some((Manufacturer::Nux, String::from("MP-2"), 0x01))
+        );
+        assert_eq!(
+            Device::extract_supported("NUX Mighty Air"),
+            Some((Manufacturer::Nux, String::from("MA-1"), 0x02))
+        );
+        assert_eq!(
+            Device::extract_supported("NUX Mighty Lite"),
+            Some((Manufacturer::Nux, String::from("ML-2"), 0x05))
         );
     }
 }
