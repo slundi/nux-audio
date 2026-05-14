@@ -83,6 +83,47 @@ impl MidiManager {
         Ok(())
     }
 
+    /// Connect to MIDI ports and return a channel receiver for incoming messages.
+    ///
+    /// Every raw MIDI message received on `port_in` is forwarded to the returned
+    /// `Receiver<Vec<u8>>`.  This is the preferred way to connect when the caller
+    /// needs to read device responses (e.g. the version handshake).
+    pub fn connect_with_channel(
+        &mut self,
+        port_in: usize,
+        port_out: usize,
+    ) -> Result<std::sync::mpsc::Receiver<Vec<u8>>, Box<dyn Error>> {
+        let ports_out = self.output.ports();
+        if port_out >= ports_out.len() {
+            return Err("Output port index out of range".into());
+        }
+        let ports_in = self.input.ports();
+        if port_in >= ports_in.len() {
+            return Err("Input port index out of range".into());
+        }
+
+        let port = &ports_out[port_out];
+        let port_name = self.output.port_name(port)?;
+        let output = MidiOutput::new("NUX Audio MIDI Output")?;
+        self.connection_out = Some(output.connect(port, &format!("nux-audio-{}", port_name))?);
+
+        let port = &ports_in[port_in];
+        let port_name = self.input.port_name(port)?;
+        let input = MidiInput::new("NUX Audio MIDI Input")?;
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        let connection_in = input.connect(
+            port,
+            &format!("nux-audio-{}", port_name),
+            move |_stamp, message, _| {
+                let _ = tx.send(message.to_vec());
+            },
+            (),
+        )?;
+        self.connection_in = Some(connection_in);
+
+        Ok(rx)
+    }
+
     /// Send SysEx data to the connected device
     pub fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
         let mut buffer = Vec::with_capacity(data.len() + 3);

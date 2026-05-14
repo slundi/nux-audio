@@ -48,7 +48,7 @@ impl Cli {
                     );
                 }
             }
-            Commands::Info => self.info(),
+            Commands::Info => self.info().await,
             Commands::Preset { action } => match action {
                 PresetAction::Show => println!("Showing current preset..."),
                 PresetAction::Get(args) => {
@@ -99,52 +99,136 @@ impl Cli {
         // TODO: get device
     }
 
-    fn info(self) {
-        println!("Showing device info...");
-        match MidiManager::new() {
-            Ok(mut manager) => {
-                let ports = list_devices();
-                let mut port_in = 0usize;
-                let mut port_out = 0usize;
-                if self.device_name.is_none() && self.midi_port.is_none() && ports.len() == 2 {
-                    // use the only available MIDI port
-                    if ports[0].is_output {
-                        port_out = ports[0].port;
-                        port_in = ports[1].port;
-                    } else {
-                        port_out = ports[1].port;
-                        port_in = ports[0].port;
-                    }
-                // } else if let Some(p) = self.midi_port {
-                //     // port chosen by user
-                //     port = p;
-                } else if let Some(n) = self.device_name {
-                    // get the device by the provided name
-                    for port in ports {
-                        if n == port.name {
-                            if port.is_output {
-                                port_out = port.port;
-                            } else {
-                                port_in = port.port;
-                            }
-                        }
-                    }
-                } else {
-                    eprint!("No device avialable");
+    async fn info(self) {
+        use crate::device::{extract_version, Device};
+        use crate::registry::REGISTRY;
+        use std::time::{Duration, Instant};
+
+        // Detect supported devices on the system
+        let mut devices = Device::detect();
+
+        // Select target device
+        let device = if let Some(name) = &self.device_name {
+            // User specified a device by name or model code
+            let n = name.to_lowercase();
+            match devices
+                .iter()
+                .position(|d| d.name.to_lowercase().contains(&n) || d.model.to_lowercase() == n)
+            {
+                Some(i) => devices.swap_remove(i),
+                None => {
+                    eprintln!("Device '{name}' not found. Use `nux devices` to list ports.");
                     return;
-                }
-                if let Err(e) = manager.connect(port_in, port_out) {
-                    eprint!("Cannot connect to MIDI port: {e}");
-                    return;
-                }
-                match manager.send_sysex(&DEVICE_VERSION_REQUEST) {
-                    Ok(result) => println!("TODO: handle SysEx result"),
-                    Err(e) => eprint!("SysEx command error: {e}"),
                 }
             }
-            Err(e) => eprintln!("Cannot start MIDI manager: {e}"),
+        } else {
+            match devices.len() {
+                0 => {
+                    eprintln!("No supported Nux device detected. Is the device connected?");
+                    return;
+                }
+                1 => devices.swap_remove(0),
+                _ => {
+                    eprintln!(
+                        "Multiple devices found — specify one with -d <model>: {}",
+                        devices
+                            .iter()
+                            .map(|d| d.model.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    return;
+                }
+            }
+        };
+
+        // Resolve port indices (both input and output are required)
+        let port_in = match device.inputs.values().copied().next() {
+            Some(p) => p,
+            None => {
+                eprintln!("No MIDI input port for {}", device.model);
+                return;
+            }
+        };
+        let port_out = match device.outputs.values().copied().next() {
+            Some(p) => p,
+            None => {
+                eprintln!("No MIDI output port for {}", device.model);
+                return;
+            }
+        };
+
+        let mut manager = match MidiManager::new() {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Cannot create MIDI manager: {e}");
+                return;
+            }
+        };
+
+        let rx = match manager.connect_with_channel(port_in, port_out) {
+            Ok(rx) => rx,
+            Err(e) => {
+                eprintln!("Cannot connect to {}: {e}", device.model);
+                return;
+            }
+        };
+
+        if let Err(e) = manager.send_sysex(&DEVICE_VERSION_REQUEST) {
+            eprintln!("Failed to send version request: {e}");
+            return;
         }
-        // TODO: error if multiple device otherwise send SysEx
+
+        // Bridge: wait for the version response in a blocking task with a 3 s timeout.
+        // The version response always starts with [0xF0, 0x43, 0x58, 0x10].
+        const VERSION_HEADER: [u8; 4] = [0xF0, 0x43, 0x58, 0x10];
+        const TIMEOUT: Duration = Duration::from_secs(3);
+
+        let response = tokio::task::spawn_blocking(move || {
+            let deadline = Instant::now() + TIMEOUT;
+            loop {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err("Timeout: no response from device within 3 seconds".to_owned());
+                }
+                match rx.recv_timeout(remaining) {
+                    Ok(msg) if msg.starts_with(&VERSION_HEADER) => return Ok(msg),
+                    Ok(_) => continue, // ignore unrelated messages (CC, etc.)
+                    Err(_) => return Err("Timeout: no response from device".to_owned()),
+                }
+            }
+        })
+        .await;
+
+        let response = match response {
+            Ok(Ok(r)) => r,
+            Ok(Err(msg)) => {
+                eprintln!("{msg}");
+                return;
+            }
+            Err(e) => {
+                eprintln!("Internal error: {e}");
+                return;
+            }
+        };
+
+        let firmware = match extract_version(&response) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Could not parse firmware version: {e}");
+                return;
+            }
+        };
+
+        // Print device summary
+        println!("Device:       {}", device.name);
+        println!("Model:        {}", device.model);
+        println!("Device ID:    0x{:02X}", device.device_id);
+        println!("Firmware:     {firmware}");
+        if let Some(spec) = REGISTRY.by_device_id(device.device_id) {
+            println!("Presets:      {}", spec.preset_count);
+            println!("Signal chain: {}", spec.signal_chain.join(" → "));
+        }
     }
 }
 

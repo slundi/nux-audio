@@ -5,7 +5,7 @@
 * [x] **Core Data Structures**: `Manufacturer`, `Device` (model, device_id, MIDI port maps), `Preset` (number, name, scene, effect_order, effects map), `EffectOption` / `KnobDef` / `KnobState`, `ControllerState` — all implemented in `src/`.
 * [x] **Device Registry**: `devices.toml` embedded at compile time and parsed at startup into a `static REGISTRY: LazyLock<DeviceRegistry>` (`src/registry.rs`). Each entry carries `device_id`, `model_code`, `preset_count`, `midi_port_prefix`, and `signal_chain`. `Device::extract_supported()` now delegates to `REGISTRY.match_port()` (longest-prefix match) instead of hardcoded branches. Effect model catalogs remain compiled-in Rust; `effects.yaml` is still reference-only.
 * [x] **Hardware abstraction**: `MidiManager` with `midir` for port enumeration, connect, send, disconnect on Linux/ALSA. `Device::detect()` matches MIDI port names against 6 supported Nux device models.
-* [~] **Handshake Protocol**: `DEVICE_VERSION_REQUEST` (`58 00`) sent by `nux info`. `extract_version()` parses the response bytes. Response **not yet wired** into device state — the MIDI input callback prints only.
+* [x] **Handshake Protocol**: `nux info` uses `Device::detect()` to find the device, connects via `MidiManager::connect_with_channel()` (returns `Receiver<Vec<u8>>`), sends `DEVICE_VERSION_REQUEST`, and waits up to 3 s in a `spawn_blocking` task for the `[0xF0, 0x43, 0x58, 0x10]` response. Firmware version is parsed by `extract_version()` and displayed alongside model, device ID, preset count, and signal chain from the registry.
 
 ## Phase 2: Communication Engine
 
