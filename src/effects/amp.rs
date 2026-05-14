@@ -10,16 +10,15 @@
 
 use std::{collections::HashMap, sync::LazyLock};
 
-use super::{EffectOption, Knob};
+use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8) -> Knob<'static> {
-    Knob {
+fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
+    KnobDef {
         id,
         title,
         range_start: Some(0),
         range_end: Some(100),
         ctrl: cc,
-        current_value: None,
     }
 }
 
@@ -34,40 +33,40 @@ const BIAS: u8 = 28;
 const LEVEL: u8 = 29;
 
 // Label aliases that reuse the same CC but with different names
-fn gain() -> Knob<'static> {
+fn gain() -> KnobDef<'static> {
     knob("gain", "GAIN", GAIN)
 }
-fn master() -> Knob<'static> {
+fn master() -> KnobDef<'static> {
     knob("master", "MASTER", MASTER)
 }
-fn bass() -> Knob<'static> {
+fn bass() -> KnobDef<'static> {
     knob("bass", "BASS", BASS)
 }
-fn cut() -> Knob<'static> {
+fn cut() -> KnobDef<'static> {
     knob("cut", "CUT", BASS)
 } // same CC as bass
-fn middle() -> Knob<'static> {
+fn middle() -> KnobDef<'static> {
     knob("middle", "MIDDLE", MIDDLE)
 }
-fn mid_freq() -> Knob<'static> {
+fn mid_freq() -> KnobDef<'static> {
     knob("mid_freq", "M FREQ", MIDDLE)
 } // same CC as middle
-fn treble() -> Knob<'static> {
+fn treble() -> KnobDef<'static> {
     knob("treble", "TREBLE", TREBLE)
 }
-fn presence() -> Knob<'static> {
+fn presence() -> KnobDef<'static> {
     knob("presence", "PRESENCE", PRESENCE)
 }
-fn tone_p() -> Knob<'static> {
+fn tone_p() -> KnobDef<'static> {
     knob("tone", "TONE", PRESENCE)
 } // same CC as presence
-fn bright() -> Knob<'static> {
+fn bright() -> KnobDef<'static> {
     knob("bright_sw", "BRIGHT SW", BIAS)
 } // same CC as bias
-fn bias() -> Knob<'static> {
+fn bias() -> KnobDef<'static> {
     knob("bias", "BIAS", BIAS)
 }
-fn level() -> Knob<'static> {
+fn level() -> KnobDef<'static> {
     knob("level", "LEVEL", LEVEL)
 }
 

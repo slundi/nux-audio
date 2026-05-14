@@ -8,16 +8,15 @@
 
 use std::{collections::HashMap, sync::LazyLock};
 
-use super::{EffectOption, Knob};
+use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8) -> Knob<'static> {
-    Knob {
+fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
+    KnobDef {
         id,
         title,
         range_start: Some(0),
         range_end: Some(100),
         ctrl: cc,
-        current_value: None,
     }
 }
 

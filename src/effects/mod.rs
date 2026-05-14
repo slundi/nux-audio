@@ -62,7 +62,7 @@ pub struct EffectOption<'a> {
     pub on_byte: u8,
     pub off_byte: u8,
     pub category_color: u32,
-    pub knobs: Vec<Knob<'a>>,
+    pub knobs: Vec<KnobDef<'a>>,
     pub dominant_color: Option<u32>,
 }
 
@@ -77,69 +77,22 @@ pub struct Effect<'a> {
 }
 
 #[derive(Default, Clone, PartialEq, Debug)]
-pub struct Knob<'a> {
+pub struct KnobDef<'a> {
     pub id: &'a str,
     pub title: &'a str,
-
     pub range_start: Option<u8>, // Always 0
     pub range_end: Option<u8>,
-
     pub ctrl: u8,
-    pub current_value: Option<u8>, // use Cell? if knob instances are static?
 }
 
-pub struct Wah<'a> {
-    // pub id: String,
-    pub title: &'a str,
-    pub on_byte: u8,
-    pub off_byte: u8,
-    pub knobs: Vec<Knob<'a>>,
+/// Runtime state for a single knob (current value received from device).
+#[derive(Clone, PartialEq, Debug)]
+pub struct KnobState {
+    pub def_id: &'static str,
+    pub value: u8,
 }
 
-// const DEFAULT_GATE: EffectOption = EffectOption {
-//     id: Some("DEFAULT_GATE".to_owned()),
-//     title: "Default Gate".to_owned(),
-//     on_byte: 0x01,
-//     off_byte: 0x41,
-//     category_color: 0, //TODO:
-//     knobs: vec![
-//         Knob {
-//             id: "sens",
-//             title: "SENS",
-//             range_start: 0,
-//             range_end: 100,
-//             ctrl: 44,
-//             current_value: None,
-//         },
-//         Knob {
-//             id: "decay",
-//             title: "DECAY",
-//             range_start: 0,
-//             range_end: 100,
-//             ctrl: 45,
-//             current_value: None,
-//         },
-//     ],
-//     dominant_color: Some(0x9ccc65),
-// };
-
-// We return Option<MatchedEffect> because the effect might not be found.
-// We take `effect_option` by reference to avoid taking ownership.
-// pub fn get_main_effect_group<'a>(effect_option: &'a EffectOption<'a>) -> Option<&Effect<'a>> {
-//     // Look up the category in EFFECT_CONFIG
-//     let effect_category_config = EFFECT_CONFIG.get(&effect_option.category)?;
-//     // `?` here propagates `None` if the category is not found.
-//     // If found, `effect_category_config` is an `&EffectCategoryConfig`.
-
-//     // Then, search within the options for a matching ID
-//     effect_category_config
-//         .options
-//         .iter() // Iterate over references to MatchedEffect
-//         .find(|opt| opt.id == effect_option.id)
-//         // `find` returns `Option<Effect>`, which is exactly what we want.
-// }
-
-pub fn extract_effects(response: &[u8]) -> Effect {
+pub fn extract_effects(response: &[u8]) -> Effect<'_> {
     todo!()
 }
 

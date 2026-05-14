@@ -10,20 +10,19 @@
 
 use std::{collections::HashMap, sync::LazyLock};
 
-use super::{EffectOption, Knob};
+use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> Knob<'static> {
-    Knob {
+fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
+    KnobDef {
         id,
         title,
         range_start: Some(0),
         range_end: Some(end),
         ctrl: cc,
-        current_value: None,
     }
 }
 
-fn electric_knobs() -> Vec<Knob<'static>> {
+fn electric_knobs() -> Vec<KnobDef<'static>> {
     vec![
         knob("mic", "MIC", 64, 7), // DYN421/S57/U87/R122/R121/C414/C3000/B52
         knob("mic_axis", "MIC AXIS", 65, 2), // CENTER/MIDDLE/EDGE
@@ -33,7 +32,7 @@ fn electric_knobs() -> Vec<Knob<'static>> {
     ]
 }
 
-fn other_knobs() -> Vec<Knob<'static>> {
+fn other_knobs() -> Vec<KnobDef<'static>> {
     vec![
         knob("level", "LEVEL", 66, 100),
         knob("lo_cut", "LO CUT", 67, 100),
