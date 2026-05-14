@@ -1,0 +1,472 @@
+# Common effects mapping for all devices
+common_effects_mapping:
+  # Effets présents dans tous les modèles
+  universal_effects:
+    - amp_model:
+        id_range: [0x00, 0x0F]
+        common_models: ["JZ Clean", "Twin Rvb", "Brit 2203"]
+    - delay:
+        id_range: [0x20, 0x2F]
+        common_types: ["Digital Delay"]
+    - reverb:
+        id_range: [0x30, 0x3F]
+        common_types: ["Hall", "Room"]
+    - eq:
+        bass_cc: 2
+        middle_cc: 3
+        treble_cc: 4
+
+  pro_family_exclusive:
+    - secret_amps:
+        id_range: [0x08, 0x0F]
+        models: ["Class A15", "Vibro King", "Budda", "Brit Blues", "Match D30", "Brit 2000", "Uber HiGain"]
+    - advanced_modulation:
+        id_range: [0x15, 0x19] 
+        types: ["Tremolo", "Octave", "Ring Mod"]
+    - cabinet_simulation:
+        id: 0x60
+        cc_range: [80, 85]
+
+  mg_family_exclusive:  # TODO:
+    - looper:
+        id: 0x70
+        cc_range: [110, 115]
+        max_time: 60  # seconds
+    - expression_pedal:
+        cc_range: [120, 127]
+    - scene_control:
+        cc_range: [100, 103]
+
+effects:
+  # Amplificateurs
+  amp_models:
+    - id: 0x00
+      name: "Twin Rvb"
+      category: "amp"
+      parameters:
+        - name: "gain"
+          cc: 1
+          range: [0, 100]
+          default: 50
+        - name: "bass"
+          cc: 2
+          range: [0, 100]
+          default: 50
+        - name: "middle"
+          cc: 3
+          range: [0, 100]
+          default: 50
+        - name: "treble"
+          cc: 4
+          range: [0, 100]
+          default: 50
+        - name: "presence"
+          cc: 5
+          range: [0, 100]
+          default: 50
+        - name: "volume"
+          cc: 7
+          range: [0, 100]
+          default: 50
+          
+    - id: 0x01
+      name: "JZ Clean"
+      category: "amp"
+      parameters:
+        - name: "gain"
+          cc: 1
+          range: [0, 100]
+          default: 30
+        - name: "bass"
+          cc: 2
+          range: [0, 100]
+          default: 50
+        - name: "middle"
+          cc: 3
+          range: [0, 100]
+          default: 50
+        - name: "treble"
+          cc: 4
+          range: [0, 100]
+          default: 60
+        - name: "presence"
+          cc: 5
+          range: [0, 100]
+          default: 50
+        - name: "volume"
+          cc: 7
+          range: [0, 100]
+          default: 50
+          
+    - id: 0x02
+      name: "Class A15"
+      category: "amp"
+      secret: true
+      parameters:
+        - name: "gain"
+          cc: 1
+          range: [0, 100]
+          default: 60
+        - name: "bass"
+          cc: 2
+          range: [0, 100]
+          default: 50
+        - name: "middle"
+          cc: 3
+          range: [0, 100]
+          default: 50
+        - name: "treble"
+          cc: 4
+          range: [0, 100]
+          default: 50
+        - name: "presence"
+          cc: 5
+          range: [0, 100]
+          default: 50
+        - name: "volume"
+          cc: 7
+          range: [0, 100]
+          default: 50
+
+  # Effets de modulation
+  modulation_effects:
+    - id: 0x10
+      name: "Chorus"
+      category: "modulation"
+      parameters:
+        - name: "rate"
+          cc: 10
+          range: [0, 100]
+          default: 50
+        - name: "depth"
+          cc: 11
+          range: [0, 100]
+          default: 50
+        - name: "mix"
+          cc: 12
+          range: [0, 100]
+          default: 50
+        - name: "bypass"
+          cc: 20
+          range: [0, 1]
+          default: 0
+          
+    - id: 0x11
+      name: "Flanger"
+      category: "modulation"
+      parameters:
+        - name: "rate"
+          cc: 10
+          range: [0, 100]
+          default: 40
+        - name: "depth"
+          cc: 11
+          range: [0, 100]
+          default: 60
+        - name: "feedback"
+          cc: 13
+          range: [0, 100]
+          default: 30
+        - name: "mix"
+          cc: 12
+          range: [0, 100]
+          default: 50
+        - name: "bypass"
+          cc: 20
+          range: [0, 1]
+          default: 0
+          
+    - id: 0x12
+      name: "Phaser"
+      category: "modulation"
+      parameters:
+        - name: "rate"
+          cc: 10
+          range: [0, 100]
+          default: 50
+        - name: "depth"
+          cc: 11
+          range: [0, 100]
+          default: 70
+        - name: "feedback"
+          cc: 13
+          range: [0, 100]
+          default: 40
+        - name: "bypass"
+          cc: 20
+          range: [0, 1]
+          default: 0
+
+  # Effets de delay
+  delay_effects:
+    - id: 0x20
+      name: "Digital Delay"
+      category: "delay"
+      parameters:
+        - name: "time"
+          cc: 30
+          range: [0, 2000]  # en ms
+          default: 300
+        - name: "feedback"
+          cc: 31
+          range: [0, 100]
+          default: 30
+        - name: "mix"
+          cc: 32
+          range: [0, 100]
+          default: 40
+        - name: "bypass"
+          cc: 35
+          range: [0, 1]
+          default: 0
+          
+    - id: 0x21
+      name: "Analog Delay"
+      category: "delay"
+      parameters:
+        - name: "time"
+          cc: 30
+          range: [0, 1000]
+          default: 400
+        - name: "feedback"
+          cc: 31
+          range: [0, 100]
+          default: 40
+        - name: "mix"
+          cc: 32
+          range: [0, 100]
+          default: 35
+        - name: "tone"
+          cc: 33
+          range: [0, 100]
+          default: 60
+        - name: "bypass"
+          cc: 35
+          range: [0, 1]
+          default: 0
+
+  # Effets de reverb
+  reverb_effects:
+    - id: 0x30
+      name: "Hall"
+      category: "reverb"
+      parameters:
+        - name: "size"
+          cc: 40
+          range: [0, 100]
+          default: 70
+        - name: "decay"
+          cc: 41
+          range: [0, 100]
+          default: 60
+        - name: "tone"
+          cc: 42
+          range: [0, 100]
+          default: 50
+        - name: "mix"
+          cc: 43
+          range: [0, 100]
+          default: 30
+        - name: "bypass"
+          cc: 45
+          range: [0, 1]
+          default: 0
+          
+    - id: 0x31
+      name: "Room"
+      category: "reverb"
+      parameters:
+        - name: "size"
+          cc: 40
+          range: [0, 100]
+          default: 50
+        - name: "decay"
+          cc: 41
+          range: [0, 100]
+          default: 40
+        - name: "tone"
+          cc: 42
+          range: [0, 100]
+          default: 60
+        - name: "mix"
+          cc: 43
+          range: [0, 100]
+          default: 25
+        - name: "bypass"
+          cc: 45
+          range: [0, 1]
+          default: 0
+          
+    - id: 0x32
+      name: "Spring"
+      category: "reverb"
+      parameters:
+        - name: "size"
+          cc: 40
+          range: [0, 100]
+          default: 60
+        - name: "decay"
+          cc: 41
+          range: [0, 100]
+          default: 50
+        - name: "tone"
+          cc: 42
+          range: [0, 100]
+          default: 70
+        - name: "mix"
+          cc: 43
+          range: [0, 100]
+          default: 40
+        - name: "bypass"
+          cc: 45
+          range: [0, 1]
+          default: 0
+
+  # Effets de distortion
+  distortion_effects:
+    - id: 0x40
+      name: "Overdrive"
+      category: "distortion"
+      parameters:
+        - name: "drive"
+          cc: 50
+          range: [0, 100]
+          default: 60
+        - name: "tone"
+          cc: 51
+          range: [0, 100]
+          default: 50
+        - name: "level"
+          cc: 52
+          range: [0, 100]
+          default: 50
+        - name: "bypass"
+          cc: 55
+          range: [0, 1]
+          default: 0
+          
+    - id: 0x41
+      name: "Distortion"
+      category: "distortion"
+      parameters:
+        - name: "drive"
+          cc: 50
+          range: [0, 100]
+          default: 70
+        - name: "tone"
+          cc: 51
+          range: [0, 100]
+          default: 60
+        - name: "level"
+          cc: 52
+          range: [0, 100]
+          default: 50
+        - name: "bypass"
+          cc: 55
+          range: [0, 1]
+          default: 0
+
+  # Autres effets
+  other_effects:
+    - id: 0x50
+      name: "Noise Gate"
+      category: "utility"
+      parameters:
+        - name: "threshold"
+          cc: 60
+          range: [-60, 0]  # en dB
+          default: -40
+        - name: "attack"
+          cc: 61
+          range: [1, 100]  # en ms
+          default: 10
+        - name: "release"
+          cc: 62
+          range: [10, 1000]  # en ms
+          default: 200
+        - name: "bypass"
+          cc: 65
+          range: [0, 1]
+          default: 0
+          
+    - id: 0x51
+      name: "Compressor"
+      category: "dynamics"
+      parameters:
+        - name: "ratio"
+          cc: 70
+          range: [1, 10]
+          default: 4
+        - name: "threshold"
+          cc: 71
+          range: [-40, 0]  # en dB
+          default: -20
+        - name: "attack"
+          cc: 72
+          range: [1, 100]  # en ms
+          default: 10
+        - name: "release"
+          cc: 73
+          range: [50, 1000]  # en ms
+          default: 200
+        - name: "bypass"
+          cc: 75
+          range: [0, 1]
+          default: 0
+
+# Définition des effets MG-30 (selon spécifications officielles)
+mg30_effects:
+  # Overdrives/Distortions spécifiées
+  drives:
+    - {id: 0x40, name: "Dist+", category: "overdrive"}
+    - {id: 0x41, name: "RC Boost", category: "boost"}
+    - {id: 0x42, name: "AC Boost", category: "boost"}
+    - {id: 0x43, name: "Dist One", category: "distortion"}
+    - {id: 0x44, name: "T Scream", category: "overdrive"}
+    - {id: 0x45, name: "Blues Drv", category: "overdrive"}
+    - {id: 0x46, name: "Morning Drv", category: "overdrive"}
+    - {id: 0x47, name: "EAT", category: "overdrive"}
+    - {id: 0x48, name: "Red Dirt", category: "overdrive"}
+    - {id: 0x49, name: "Crunch", category: "distortion"}
+    - {id: 0x4A, name: "Muff Fuzz", category: "fuzz"}
+    - {id: 0x4B, name: "Katana Boost", category: "boost"}
+    - {id: 0x4C, name: "Red Fuzz", category: "fuzz"}
+    - {id: 0x4D, name: "Touch Wah", category: "wah"}
+    
+  # Modulations spécifiées
+  modulations:
+    - {id: 0x10, name: "CE-1", category: "chorus"}
+    - {id: 0x11, name: "CE-2", category: "chorus"}
+    - {id: 0x12, name: "ST. Chorus", category: "chorus"}
+    - {id: 0x13, name: "Vibrator", category: "vibrato"}
+    - {id: 0x14, name: "Detune", category: "pitch"}
+    - {id: 0x15, name: "Flanger", category: "flanger"}
+    - {id: 0x16, name: "Phase 90", category: "phaser"}
+    - {id: 0x17, name: "Phase 100", category: "phaser"}
+    - {id: 0x18, name: "S.C.F.", category: "phaser"}
+    - {id: 0x19, name: "U-Vibe", category: "vibe"}
+    - {id: 0x1A, name: "Tremolo", category: "tremolo"}
+    - {id: 0x1B, name: "Rotar", category: "rotary"}
+
+# Amplis secrets Mighty Plug Pro/Space (confirmés par mightier_amp)
+secret_amps:
+  mighty_plug_pro:
+    - {id: 0x08, name: "Twin Rvb", category: "clean"}
+    - {id: 0x09, name: "Class A15", category: "clean"}
+    - {id: 0x0A, name: "Vibro King", category: "clean"}
+    - {id: 0x0B, name: "Budda", category: "clean"}
+    - {id: 0x0C, name: "Brit Blues", category: "crunch"}
+    - {id: 0x0D, name: "Match D30", category: "crunch"}
+    - {id: 0x0E, name: "Brit 2000", category: "high_gain"}
+    - {id: 0x0F, name: "Uber HiGain", category: "high_gain"}
+    
+  mighty_space:
+    # Identiques au Mighty Plug Pro
+    - {id: 0x08, name: "Twin Rvb", category: "clean"}
+    - {id: 0x09, name: "Class A15", category: "clean"}
+    - {id: 0x0A, name: "Vibro King", category: "clean"}
+    - {id: 0x0B, name: "Budda", category: "clean"}
+    - {id: 0x0C, name: "Brit Blues", category: "crunch"}
+    - {id: 0x0D, name: "Match D30", category: "crunch"}
+    - {id: 0x0E, name: "Brit 2000", category: "high_gain"}
+    - {id: 0x0F, name: "Uber HiGain", category: "high_gain"}

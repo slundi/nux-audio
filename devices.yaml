@@ -1,0 +1,370 @@
+devices:
+  mighty_plug:
+    name: "Mighty Plug MP-2"
+    device_id: 0x01
+    model_code: "MP-2"
+    midi_channel: 1
+    preset_count: 7
+    amp_models: 13
+    ir_count: 20
+    effects_count: 19
+    form_factor: "headphone_amp"
+    bluetooth: true
+    
+  mighty_air:
+    name: "Mighty Air"
+    device_id: 0x02
+    model_code: "MA-1"
+    midi_channel: 1
+    preset_count: 7
+    amp_models: 13  # Identique au Mighty Plug
+    ir_resolution: 512  # Selon spec officielle
+    effects_count: 19
+    form_factor: "desktop_amp"
+    bluetooth: true
+    speaker: true
+    
+  mighty_plug_pro:
+    name: "Mighty Plug Pro MP-3"
+    device_id: 0x03
+    model_code: "MP-3"
+    midi_channel: 1
+    preset_count: 7  # Identique aux autres Mighty selon ChopTones
+    amp_models: 20  # Selon ZZounds spec
+    effects_count: 44  # Selon ZZounds spec
+    secret_amps: 8  # Confirmé par mightier_amp
+    form_factor: "headphone_amp"
+    bluetooth: true
+    usb_interface: true
+    ir_loader: true
+    
+  mighty_space:
+    name: "Mighty Space"
+    device_id: 0x04
+    model_code: "MS-1"
+    midi_channel: 1
+    preset_count: 7
+    amp_models: 20  # Identique au Mighty Plug Pro
+    effects_count: 44  # Plus de 40 effets selon spec officielle
+    secret_amps: 8  # Confirmé par mightier_amp
+    form_factor: "desktop_amp"
+    bluetooth: true
+    speaker: true
+    rechargeable: true
+    usb_interface: true
+    ir_loader: true
+    
+  mighty_lite_bt:
+    name: "Mighty Lite BT MKII"
+    device_id: 0x05
+    model_code: "ML-2"
+    midi_channel: 1
+    preset_count: 7
+    amp_models: 8  # Version simplifiée
+    effects_count: 12  # Version réduite
+    form_factor: "desktop_amp"
+    bluetooth: true
+    
+  mighty_8_bt:
+    name: "Mighty 8BT MKII"
+    device_id: 0x06
+    model_code: "M8-2"
+    midi_channel: 1
+    preset_count: 8
+    amp_models: 10
+    effects_count: 15
+    output_power: "8W"
+    speaker_size: "5 inch"
+    form_factor: "combo_amp"
+    bluetooth: true
+    
+  mighty_20_bt:
+    name: "Mighty 20 MKII"
+    device_id: 0x07
+    model_code: "M20-2"
+    midi_channel: 1
+    preset_count: 8
+    amp_models: 12
+    effects_count: 18
+    output_power: "20W"
+    speaker_size: "6.5 inch"
+    form_factor: "combo_amp"
+    
+  mighty_40_bt:
+    name: "Mighty 40 MKII"
+    device_id: 0x08
+    model_code: "M40-2"
+    midi_channel: 1
+    preset_count: 8
+    amp_models: 12
+    effects_count: 18
+    output_power: "40W"
+    speaker_size: "8 inch"
+    form_factor: "combo_amp"
+    
+  mighty_60_bt:
+    name: "Mighty 60 MKII"
+    device_id: 0x0A
+    model_code: "M60-2"
+    midi_channel: 1
+    preset_count: 8
+    amp_models: 15
+    effects_count: 20
+    output_power: "60W"
+    speaker_size: "10 inch"
+    form_factor: "combo_amp"
+    
+  mg_30:
+    name: "MG-30 Versatile Modeler"
+    device_id: 0x09
+    model_code: "MG-30"
+    midi_channel: 1
+    preset_count: 128  # 32 presets x 4 scenes selon spec
+    amp_models: 30  # 25 électriques + 3 basse + 2 acoustiques
+    signal_blocks: 11  # Blocs de signal indépendants
+    ir_resolution: 1024  # Samples selon spec officielle
+    ir_slots: 128  # 32*4 selon spec officielle
+    effects_count: 60  # Estimation basée sur les catégories listées
+    form_factor: "multi_effects"
+    usb_interface: true
+    expression_pedal: true
+    foot_switches: true
+    looper: true
+    latency: "2ms"
+    lcd_size: "4 inch color"
+    
+  # Multi-effects additionnels mentionnés sur le site
+  mg_300:
+    name: "MG-300 Compact Modeler"
+    device_id: 0x0B
+    model_code: "MG-300"
+    midi_channel: 1
+    preset_count: 200
+    amp_models: 50
+    effects_count: 80
+    form_factor: "multi_effects"
+    
+  mg_300_mk2:
+    name: "MG-300 MKII Modeling Guitar Processor"
+    device_id: 0x0C
+    model_code: "MG-300-2"
+    midi_channel: 1
+    preset_count: 256
+    amp_models: 60
+    effects_count: 100
+    form_factor: "multi_effects"
+    
+  mg_400:
+    name: "MG-400 Best Value Modeler"
+    device_id: 0x0D
+    model_code: "MG-400"
+    midi_channel: 1
+    preset_count: 300
+    amp_models: 80
+    effects_count: 120
+    form_factor: "multi_effects"
+    
+  mg_101:
+    name: "MG-101 Modeling Guitar Processor"
+    device_id: 0x0E
+    model_code: "MG-101"
+    midi_channel: 1
+    preset_count: 100
+    amp_models: 40
+    effects_count: 60
+    form_factor: "multi_effects"
+
+evice_families:
+  # Famille Mighty Basic (Plug + Air) - Spécifications identiques
+  mighty_basic_family:
+    models: ["mighty_plug", "mighty_air"]
+    shared_elements:
+      preset_count: 7
+      amp_models: 13
+      ir_count: 20
+      effects_count: 19
+      bluetooth: true
+      processors:
+        - "Noise Gate"
+        - "Compressor" 
+        - "Amp Model (13 models)"
+        - "Cabinet IR (20 IRs)"
+        - "EQ (3-band)"
+        - "Modulation Effects"
+        - "Delay"
+        - "Reverb"
+      sysex_compatibility: "full"
+      differences:
+        mighty_plug: 
+          form_factor: "headphone_amp"
+        mighty_air: 
+          form_factor: "desktop_amp"
+          speaker: true
+          ir_resolution: 512
+
+  # Famille Mighty Pro (Pro + Space) - Architecture avancée
+  mighty_pro_family:
+    models: ["mighty_plug_pro", "mighty_space"]
+    shared_elements:
+      preset_count: 7
+      amp_models: 20
+      effects_count: 44
+      secret_amps: 8
+      bluetooth: true
+      usb_interface: true
+      ir_loader: true
+      processors:
+        - "Noise Gate"
+        - "Compressor"
+        - "Overdrive/Distortion"
+        - "Amp Model (20 + 8 secret)"
+        - "Cabinet Simulation + IR Loader"
+        - "EQ (4-band)"
+        - "40+ Effects"
+        - "Reverb/Delay"
+        - "Master Section"
+      advanced_features:
+        - "3rd party IR loading"
+        - "USB audio interface"
+        - "Bluetooth audio + app control"
+        - "White-Box algorithm"
+      sysex_compatibility: "full"
+      differences:
+        mighty_plug_pro:
+          form_factor: "headphone_amp"
+        mighty_space:
+          form_factor: "desktop_amp"
+          speaker: true
+          rechargeable: true
+
+  # Famille Mighty MKII Desktop
+  mighty_mkii_family:
+    models: ["mighty_8_bt", "mighty_20_bt", "mighty_40_bt", "mighty_60_bt"]
+    shared_elements:
+      preset_count: 8
+      form_factor: "combo_amp"
+      bluetooth: true  # Seulement sur 8BT
+      processors:
+        - "Noise Gate"
+        - "Compressor"
+        - "Overdrive"
+        - "Amp Models"
+        - "Cabinet Simulation"
+        - "EQ (3-4 band)"
+        - "Modulation"
+        - "Delay"
+        - "Reverb"
+      differences:
+        mighty_8_bt:
+          output_power: "8W"
+          speaker_size: "5 inch"
+          amp_models: 10
+          effects_count: 15
+        mighty_20_bt:
+          output_power: "20W"
+          speaker_size: "6.5 inch"
+          amp_models: 12
+          effects_count: 18
+        mighty_40_bt:
+          output_power: "40W"
+          speaker_size: "8 inch"  
+          amp_models: 12
+          effects_count: 18
+        mighty_60_bt:
+          output_power: "60W"
+          speaker_size: "10 inch"
+          amp_models: 15
+          effects_count: 20
+
+  # Famille MG Multi-Effects
+  mg_family:
+    models: ["mg_30", "mg_101", "mg_300", "mg_300_mk2", "mg_400"]
+    shared_elements:
+      form_factor: "multi_effects"
+      usb_interface: true
+      processors:
+        - "Input Gate"
+        - "Compressor"
+        - "Overdrive/Distortion"
+        - "Amp Models"
+        - "Cabinet Simulation"
+        - "EQ"
+        - "Modulation"
+        - "Delay"
+        - "Reverb"
+        - "Master Volume"
+      differences:
+        mg_30:
+          preset_count: 128
+          amp_models: 30
+          signal_blocks: 11
+          ir_resolution: 1024
+          features: ["4-inch color LCD", "NMP-2 footswitch", "Expression pedal", "Looper"]
+        mg_101:
+          preset_count: 100
+          amp_models: 40
+          effects_count: 60
+        mg_300:
+          preset_count: 200
+          amp_models: 50
+          effects_count: 80
+        mg_300_mk2:
+          preset_count: 256
+          amp_models: 60
+          effects_count: 100
+        mg_400:
+          preset_count: 300
+          amp_models: 80
+          effects_count: 120
+
+sysex_compatibility_matrix:
+  mighty_basic_family:
+    compatible_with: ["mighty_plug", "mighty_air"]
+    partial_compatibility: []
+
+  mighty_pro_family:
+    compatible_with: ["mighty_plug_pro", "mighty_space"]
+    partial_compatibility: ["mighty_plug", "mighty_air"] # base commands only
+
+  mighty_lite_family:
+    compatible_with: ["mighty_lite_bt"]
+    partial_compatibility: ["mighty_plug", "mighty_air"]
+
+  mighty_bt_desktop_family:
+    compatible_with: ["mighty_8_bt", "mighty_20_bt", "mighty_40_bt"]
+    partial_compatibility: []
+
+  mg_family:
+    compatible_with: ["mg_30"]
+    partial_compatibility: []
+
+sysex_templates:
+  # Mighty Basic/Pro - Changement de preset
+  mighty_preset_change:
+    template: [0xF0, 0x43, 0x58, "{device_id}", 0x00, "{preset_number}", 0xF7]
+    compatible_devices: ["mighty_plug", "mighty_air", "mighty_plug_pro", "mighty_space"]
+    parameters:
+      - device_id: "Device ID (0x01-0x04)"
+      - preset_number: "Preset number (0x00-0x06)"
+      
+  # Mighty Pro - Déblocage amplis secrets
+  mighty_pro_secret_unlock:
+    template: [0xF0, 0x43, 0x58, "{device_id}", 0x7F, 0x53, 0x45, 0x43, 0x52, 0x45, 0x54, 0xF7]
+    compatible_devices: ["mighty_plug_pro", "mighty_space"]
+    parameters:
+      - device_id: "Device ID (0x03 or 0x04)"
+      
+  # MG-30 - Changement de preset avec scène
+  mg30_preset_change:
+    template: [0xF0, 0x43, 0x58, 0x09, 0x20, "{preset_number}", "{scene}", 0xF7]
+    compatible_devices: ["mg_30"]
+    parameters:
+      - preset_number: "Preset number (0x00-0x7F)"
+      - scene: "Scene number (0x00-0x03)"
+      
+  # MG-30 - Contrôle du looper
+  mg30_looper_control:
+    template: [0xF0, 0x43, 0x58, 0x09, 0x70, "{command}", 0xF7]
+    compatible_devices: ["mg_30"]
+    parameters:
+      - command: "0x00=stop, 0x01=record, 0x02=play, 0x03=overdub"
