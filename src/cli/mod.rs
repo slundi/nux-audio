@@ -3,10 +3,7 @@ mod command_devices;
 use crate::midi::MidiManager;
 use clap::{Args, Parser, Subcommand};
 use command_devices::list as list_devices;
-use std::{
-    io::{stdin, stdout, Write},
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
 use nux_audio::{
     nux_sys_ex_commands::DEVICE_VERSION_REQUEST,
@@ -100,7 +97,7 @@ impl Cli {
     }
 
     async fn info(self) {
-        use crate::device::{extract_version, Device};
+        use crate::device::{Device, extract_version};
         use crate::registry::REGISTRY;
         use std::time::{Duration, Instant};
 
@@ -359,15 +356,6 @@ pub fn parse_effect_params_from_string(input: &str) -> Result<Vec<EffectParamete
         .split(',')
         .map(|param| parse_effect_parameters(param.trim()))
         .collect()
-}
-
-/// Helper to get user input from the interractive CLI
-fn get_user_input(prompt: &str) -> String {
-    print!("{}", prompt);
-    stdout().flush().unwrap();
-    let mut input = String::new();
-    stdin().read_line(&mut input).unwrap();
-    input.trim().to_string()
 }
 
 #[cfg(test)]

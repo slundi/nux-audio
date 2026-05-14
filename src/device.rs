@@ -82,10 +82,20 @@ impl Device {
 
     /// Detect supported device(s) and return a list of available devices with their MIDI ports.
     pub fn detect() -> Vec<Self> {
-        let midi_in =
-            MidiInput::new("MIDI Input Lister").expect("Cannot create a MIDI input lister");
-        let midi_out =
-            MidiOutput::new("MIDI Output Lister").expect("Cannot create a MIDI output lister");
+        let midi_in = match MidiInput::new("MIDI Input Lister") {
+            Ok(m) => m,
+            Err(e) => {
+                error!("Cannot create MIDI input lister: {e}");
+                return Vec::new();
+            }
+        };
+        let midi_out = match MidiOutput::new("MIDI Output Lister") {
+            Ok(m) => m,
+            Err(e) => {
+                error!("Cannot create MIDI output lister: {e}");
+                return Vec::new();
+            }
+        };
 
         let mut devices: HashMap<String, Self> = HashMap::new();
 

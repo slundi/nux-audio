@@ -40,7 +40,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 
 ## Phase 7: Community & Extensibility
 
-* [~] **Error Handling**: `anyhow`/`thiserror` used throughout. Some panics remain (e.g. `midir_test`).
+* [x] **Error Handling**: `thiserror` used throughout. Some panics remain (e.g. `midir_test`).
 * [~] **Logging**: `tracing` + `tracing-subscriber` configured; XDG log file placement done in `configure_logger`.
 * [ ] **Testing**: Mock MIDI backend for CI/CD testing without physical hardware.
 * [ ] **External Mapping Support**: Allow users to load custom YAML files for unsupported pedals.
