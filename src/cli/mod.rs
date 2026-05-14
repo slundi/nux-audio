@@ -1,5 +1,7 @@
 mod command_devices;
+pub mod error;
 
+use crate::export::OutputFormat;
 use crate::midi::MidiManager;
 use clap::{Args, Parser, Subcommand};
 use command_devices::list as list_devices;
@@ -24,12 +26,33 @@ pub struct Cli {
     #[arg(short = 'p', long = "port", global = true)]
     pub midi_port: Option<usize>,
 
+    /// Output preset data as YAML (default)
+    #[arg(long, global = true, conflicts_with = "json")]
+    pub yaml: bool,
+
+    /// Output preset data as JSON
+    #[arg(long, global = true, conflicts_with = "yaml")]
+    pub json: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
 
 impl Cli {
+    /// Resolve the output format from `--json` / `--yaml` flags.
+    /// Defaults to YAML when neither flag is set.
+    pub fn output_format(&self) -> OutputFormat {
+        if self.json {
+            OutputFormat::Json
+        } else {
+            OutputFormat::Yaml
+        }
+    }
+}
+
+impl Cli {
     pub async fn process(self) {
+        let format = self.output_format();
         match self.command {
             Commands::Devices => {
                 println!("Listing available devices...");
@@ -47,14 +70,26 @@ impl Cli {
             }
             Commands::Info => self.info().await,
             Commands::Preset { action } => match action {
-                PresetAction::Show => println!("Showing current preset..."),
+                PresetAction::Show => {
+                    // TODO: fetch current preset from device, then:
+                    // let file = PresetFile::from_preset(&preset, &device.model);
+                    // println!("{}", file.to_string_fmt(format).unwrap());
+                    println!("Showing current preset... (format: {format:?})");
+                }
                 PresetAction::Get(args) => {
+                    // TODO: fetch preset slot from device, then:
+                    // let file = PresetFile::from_preset(&preset, &device.model);
+                    // match args.filename {
+                    //     Some(path) => file.write_to_file(&path, format).unwrap(),
+                    //     None => println!("{}", file.to_string_fmt(format).unwrap()),
+                    // }
                     println!(
-                        "Getting preset from slot: {:?}, saving to: {:?}",
+                        "Getting preset from slot: {:?}, saving to: {:?} (format: {format:?})",
                         args.slot, args.filename
                     );
                 }
                 PresetAction::Send(args) => {
+                    // TODO: PresetFile::read_from_file(&args.filename), then send SysEx
                     println!(
                         "Sending preset from: {:?} to slot: {:?}",
                         args.filename, args.slot

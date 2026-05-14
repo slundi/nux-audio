@@ -18,7 +18,7 @@ pub const CC_BYPASS_ON: u8 = 0x7F;
 /// MIDI CC value that bypasses an effect slot (boolean false in MIDI).
 pub const CC_BYPASS_OFF: u8 = 0x00;
 
-#[derive(Default, Clone, Copy, PartialEq, Debug)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u8)]
 pub enum EffectCategory {
     Wah = 0,
@@ -49,6 +49,24 @@ impl EffectCategory {
         match self {
             EffectCategory::Vol => None,
             _ => Some(self as u8),
+        }
+    }
+
+    /// Return the canonical display name for this category.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Wah => "Wah",
+            Self::Comp => "Comp",
+            Self::Efx => "Efx",
+            Self::Amp => "Amp",
+            Self::Eq => "Eq",
+            Self::Gate => "Gate",
+            Self::Mod => "Mod",
+            Self::Delay => "Delay",
+            Self::Reverb => "Reverb",
+            Self::Ir => "Ir",
+            Self::Sr => "Sr",
+            Self::Vol => "Vol",
         }
     }
 

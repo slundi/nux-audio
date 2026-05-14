@@ -35,4 +35,16 @@ pub enum CliError {
 
     #[error("internal task error: {0}")]
     TaskJoin(String),
+
+    #[error("cannot serialize preset: {0}")]
+    Serialize(String),
+
+    #[error("cannot deserialize preset: {0}")]
+    Deserialize(String),
+
+    #[error("cannot write to '{path}': {detail}")]
+    WriteFile { path: String, detail: String },
+
+    #[error("cannot read from '{path}': {detail}")]
+    ReadFile { path: String, detail: String },
 }
