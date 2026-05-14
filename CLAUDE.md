@@ -26,6 +26,8 @@
 2. **Modular Devices**: Do not hardcode device logic. Use the trait system to allow different "Drivers" for MG-series vs Mighty-series.
 3. **Linux Priority**: Ensure compatibility with ALSA/Jack backends via `midir`.
 4. **Safety**: Implement "Sanity Checks" on CC values (0-127) before sending to prevent device crashes or audio spikes.
+5. **Readability**: if a file grow big (more than 500-600 lines), split it (separated test file if more than 70% of lines), create mod.
+6. **Documentation**: at the beginning of file, describe what the file will contain.
 
 ## Development Workflow
 After coding always
