@@ -43,4 +43,11 @@ pub enum NuxError {
 
     #[error("effect slot {0:?} has no bypass CC (Vol slot has no bypass toggle)")]
     NoBypassCc(String),
+
+    // ── Async dispatch ────────────────────────────────────────────────────────
+    #[error("no response from device within the timeout period")]
+    ResponseTimeout,
+
+    #[error("MIDI dispatcher channel closed unexpectedly")]
+    ChannelClosed,
 }

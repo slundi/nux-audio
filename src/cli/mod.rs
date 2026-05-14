@@ -99,14 +99,16 @@ impl Cli {
     async fn info(self) {
         use crate::device::{Device, extract_version};
         use crate::registry::REGISTRY;
-        use std::time::{Duration, Instant};
+        use std::time::Duration;
+
+        const VERSION_HEADER: [u8; 4] = [0xF0, 0x43, 0x58, 0x10];
+        const TIMEOUT: Duration = Duration::from_secs(3);
 
         // Detect supported devices on the system
         let mut devices = Device::detect();
 
         // Select target device
         let device = if let Some(name) = &self.device_name {
-            // User specified a device by name or model code
             let n = name.to_lowercase();
             match devices
                 .iter()
@@ -163,8 +165,9 @@ impl Cli {
             }
         };
 
-        let rx = match manager.connect_with_channel(port_in, port_out) {
-            Ok(rx) => rx,
+        // Connect via async dispatcher — bridges sync midir callback into async tokio
+        let dispatcher = match manager.connect_with_dispatcher(port_in, port_out) {
+            Ok(d) => d,
             Err(e) => {
                 eprintln!("Cannot connect to {}: {e}", device.model);
                 return;
@@ -176,35 +179,11 @@ impl Cli {
             return;
         }
 
-        // Bridge: wait for the version response in a blocking task with a 3 s timeout.
-        // The version response always starts with [0xF0, 0x43, 0x58, 0x10].
-        const VERSION_HEADER: [u8; 4] = [0xF0, 0x43, 0x58, 0x10];
-        const TIMEOUT: Duration = Duration::from_secs(3);
-
-        let response = tokio::task::spawn_blocking(move || {
-            let deadline = Instant::now() + TIMEOUT;
-            loop {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    return Err("Timeout: no response from device within 3 seconds".to_owned());
-                }
-                match rx.recv_timeout(remaining) {
-                    Ok(msg) if msg.starts_with(&VERSION_HEADER) => return Ok(msg),
-                    Ok(_) => continue, // ignore unrelated messages (CC, etc.)
-                    Err(_) => return Err("Timeout: no response from device".to_owned()),
-                }
-            }
-        })
-        .await;
-
-        let response = match response {
-            Ok(Ok(r)) => r,
-            Ok(Err(msg)) => {
-                eprintln!("{msg}");
-                return;
-            }
+        // Wait asynchronously for the version response (starts with VERSION_HEADER)
+        let response = match dispatcher.await_response(&VERSION_HEADER, TIMEOUT).await {
+            Ok(r) => r,
             Err(e) => {
-                eprintln!("Internal error: {e}");
+                eprintln!("{e}");
                 return;
             }
         };

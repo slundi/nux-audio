@@ -11,7 +11,7 @@
 
 * [x] **SysEx Templating**: `build_sysex_message()` and `send_sysex()` / `send_sysex_raw()` implemented. All known MG-30 request/response byte patterns defined as constants. Parameterized typed builders for MG-30 (`mg30_request_preset`, `mg30_change_preset`, `mg30_save_preset`, `mg30_looper_control`, `mg30_set_effect_order`) and Mighty series (`mighty_change_preset`). `SysExTemplate` + `TemplateSlot` system for runtime parameter substitution; predefined templates in `nux_sys_ex_commands::templates` mirror each typed builder and are verified by tests.
 * [x] **Real-time Control (CC)**: All CC numbers mapped in `KnobDef.ctrl` for every effect slot and model. `MidiManager::send_cc(control, value)` sends a validated CC message (rejects values > 127 with `NuxError::CcValueOutOfRange`). `MidiManager::send_raw_midi` exposes the raw output port. `EffectCategory::bypass_cc()` maps each slot to its bypass CC (discriminant 0–10; `Vol` returns `None`). `CC_BYPASS_ON` / `CC_BYPASS_OFF` constants provided.
-* [~] **Asynchronous handling**: `tokio` in `Cargo.toml`, `Cli::process()` is async. MIDI callbacks are synchronous; response routing and async message dispatch are not yet wired.
+* [x] **Asynchronous handling**: `MidiDispatcher` backed by `tokio::sync::broadcast` bridges sync midir callbacks to async tokio. `connect_with_dispatcher()` on `MidiManager` replaces the old `spawn_blocking` + `recv_timeout` pattern. `info()` uses `dispatcher.await_response()` with a typed timeout.
 
 ## Phase 3: Preset Management
 

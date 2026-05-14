@@ -1,6 +1,59 @@
 use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 use nux_audio::{SYSEX_END, SYSEX_START};
 use std::error::Error;
+use std::time::Duration;
+use tokio::sync::broadcast;
+
+const DISPATCHER_CAPACITY: usize = 64;
+
+/// Async MIDI response dispatcher backed by a `tokio::sync::broadcast` channel.
+///
+/// Bridges the synchronous midir callback into async tokio consumers.
+/// Multiple tasks can subscribe independently; each receives every message.
+pub struct MidiDispatcher {
+    tx: broadcast::Sender<Vec<u8>>,
+}
+
+impl MidiDispatcher {
+    fn new(tx: broadcast::Sender<Vec<u8>>) -> Self {
+        Self { tx }
+    }
+
+    /// Subscribe to receive all incoming MIDI messages.
+    pub fn subscribe(&self) -> broadcast::Receiver<Vec<u8>> {
+        self.tx.subscribe()
+    }
+
+    /// Wait asynchronously for the first message whose bytes start with `pattern`.
+    ///
+    /// Returns [`NuxError::ResponseTimeout`] if no matching message arrives within
+    /// `timeout`, and [`NuxError::ChannelClosed`] if the sender is dropped.
+    pub async fn await_response(
+        &self,
+        pattern: &[u8],
+        timeout: Duration,
+    ) -> Result<Vec<u8>, crate::error::NuxError> {
+        let mut rx = self.tx.subscribe();
+        let pattern = pattern.to_vec();
+        let result = tokio::time::timeout(timeout, async move {
+            loop {
+                match rx.recv().await {
+                    Ok(msg) if msg.starts_with(&pattern) => return Ok(msg),
+                    Ok(_) => continue,
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => {
+                        return Err(crate::error::NuxError::ChannelClosed);
+                    }
+                }
+            }
+        })
+        .await;
+        match result {
+            Ok(inner) => inner,
+            Err(_elapsed) => Err(crate::error::NuxError::ResponseTimeout),
+        }
+    }
+}
 
 /// MIDI connection manager for NUX devices
 pub struct MidiManager {
@@ -43,44 +96,6 @@ impl MidiManager {
             .collect()
     }
 
-    /// Connect to a MIDI port by index
-    pub fn connect(&mut self, port_in: usize, port_out: usize) -> Result<(), Box<dyn Error>> {
-        // check port range
-        let ports_out = self.output.ports();
-        if port_out >= ports_out.len() {
-            return Err("Output port index out of range".into());
-        }
-        let ports_in = self.input.ports();
-        if port_in >= ports_in.len() {
-            return Err("Input port index out of range".into());
-        }
-
-        let port = &ports_out[port_out];
-        let port_name = self.output.port_name(port)?;
-
-        // Create a new output instance for the connection
-        let output = MidiOutput::new("NUX Audio MIDI Output")?;
-        let connection_out = output.connect(port, &format!("nux-audio-{}", port_name))?;
-        self.connection_out = Some(connection_out);
-
-        let port = &ports_in[port_in];
-        let port_name = self.input.port_name(port)?;
-
-        let input = MidiInput::new("NUX Audio MIDI Intput")?;
-        // let connection_in = input.connect(port, &format!("nux-audio-{}", port_name), move |stamp, message, data| {
-        //     println!("TODO: callback: {stamp}ms\n\tSent: {:?}\n\tResp: {:?}", message, data);
-        // }, ())?;
-        let connection_in = input.connect(
-            port,
-            &format!("nux-audio-{}", port_name),
-            midi_input_callback,
-            (),
-        )?;
-
-        self.connection_in = Some(connection_in);
-        Ok(())
-    }
-
     /// Connect to MIDI ports and return a channel receiver for incoming messages.
     ///
     /// Every raw MIDI message received on `port_in` is forwarded to the returned
@@ -120,6 +135,48 @@ impl MidiManager {
         self.connection_in = Some(connection_in);
 
         Ok(rx)
+    }
+
+    /// Connect to MIDI ports and return a [`MidiDispatcher`] for async response routing.
+    ///
+    /// All incoming MIDI bytes are forwarded to a `tokio::sync::broadcast` channel.
+    /// Callers use [`MidiDispatcher::await_response`] to wait for a specific message
+    /// without blocking the async runtime.
+    pub fn connect_with_dispatcher(
+        &mut self,
+        port_in: usize,
+        port_out: usize,
+    ) -> Result<MidiDispatcher, Box<dyn Error>> {
+        let ports_out = self.output.ports();
+        if port_out >= ports_out.len() {
+            return Err("Output port index out of range".into());
+        }
+        let ports_in = self.input.ports();
+        if port_in >= ports_in.len() {
+            return Err("Input port index out of range".into());
+        }
+
+        let port = &ports_out[port_out];
+        let port_name = self.output.port_name(port)?;
+        let output = MidiOutput::new("NUX Audio MIDI Output")?;
+        self.connection_out = Some(output.connect(port, &format!("nux-audio-{port_name}"))?);
+
+        let port = &ports_in[port_in];
+        let port_name = self.input.port_name(port)?;
+        let input = MidiInput::new("NUX Audio MIDI Input")?;
+        let (tx, _) = broadcast::channel::<Vec<u8>>(DISPATCHER_CAPACITY);
+        let tx_clone = tx.clone();
+        let connection_in = input.connect(
+            port,
+            &format!("nux-audio-{port_name}"),
+            move |_stamp, message, _| {
+                let _ = tx_clone.send(message.to_vec());
+            },
+            (),
+        )?;
+        self.connection_in = Some(connection_in);
+
+        Ok(MidiDispatcher::new(tx))
     }
 
     /// Send SysEx data to the connected device
@@ -198,29 +255,5 @@ impl MidiManager {
 impl Drop for MidiManager {
     fn drop(&mut self) {
         self.disconnect();
-    }
-}
-
-// --- Corrected Callback function for incoming MIDI messages ---
-// The third parameter is `data: &mut D`, where D is the type of the user data passed to `connect`.
-// Since we passed `()`, it will be `data: &mut ()`.
-fn midi_input_callback(timestamp: u64, message: &[u8], _data: &mut ()) {
-    println!(
-        "[MIDI IN] Timestamp: {} - Message: {:?}",
-        timestamp, message
-    );
-    if !message.is_empty() {
-        match message[0] {
-            0xF0 => {
-                // System Exclusive (SysEx) message
-                println!("  SysEx message received!");
-            }
-            0x90..=0x9F => println!("  Note On message received! Channel: {}", message[0] & 0x0F),
-            0x80..=0x8F => println!(
-                "  Note Off message received! Channel: {}",
-                message[0] & 0x0F
-            ),
-            _ => {}
-        }
     }
 }
