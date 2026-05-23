@@ -75,7 +75,7 @@ impl Cli {
                 }
             }
             Commands::Info => command_info::run(&self.device_name).await,
-            Commands::Preset { action } => command_preset::run(action, format).await,
+            Commands::Preset { action } => command_preset::run(&self.device_name, action, format).await,
             Commands::Effect {
                 ref effect,
                 ref parameters,

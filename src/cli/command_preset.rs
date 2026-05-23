@@ -1,13 +1,20 @@
 // Preset management: fetch from device and send preset files.
 
 use crate::export::OutputFormat;
+use crate::midi::MidiManager;
+use crate::preset::Preset;
 use clap::{Args, Subcommand};
+use nux_audio::nux_sys_ex_commands::{CURRENT_PRESET_BASIC, mg30_request_preset};
 use std::path::PathBuf;
+use std::time::Duration;
+
+const BASIC_HEADER: [u8; 6] = [0xF0, 0x43, 0x58, 0x70, 0x15, 0x02];
+const DETAIL_HEADER: [u8; 6] = [0xF0, 0x43, 0x58, 0x70, 0x0B, 0x02];
+const TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Subcommand)]
 pub enum PresetAction {
     /// Display current preset details
-    #[command(name = "")]
     Show,
 
     /// Get preset from device
@@ -37,32 +44,110 @@ pub struct SendPresetArgs {
     pub filename: PathBuf,
 }
 
-pub async fn run(action: PresetAction, format: OutputFormat) {
+pub async fn run(device_name: &Option<String>, action: PresetAction, _format: OutputFormat) {
     match action {
-        PresetAction::Show => {
-            // TODO: fetch current preset from device, then:
-            // let file = PresetFile::from_preset(&preset, &device.model);
-            // println!("{}", file.to_string_fmt(format).unwrap());
-            println!("Showing current preset... (format: {format:?})");
-        }
+        PresetAction::Show => show(device_name).await,
         PresetAction::Get(args) => {
-            // TODO: fetch preset slot from device, then:
-            // let file = PresetFile::from_preset(&preset, &device.model);
-            // match args.filename {
-            //     Some(path) => file.write_to_file(&path, format).unwrap(),
-            //     None => println!("{}", file.to_string_fmt(format).unwrap()),
-            // }
             println!(
-                "Getting preset from slot: {:?}, saving to: {:?} (format: {format:?})",
+                "Getting preset from slot: {:?}, saving to: {:?}",
                 args.slot, args.filename
             );
         }
         PresetAction::Send(args) => {
-            // TODO: PresetFile::read_from_file(&args.filename), then send SysEx
             println!(
                 "Sending preset from: {:?} to slot: {:?}",
                 args.filename, args.slot
             );
         }
+    }
+}
+
+async fn show(device_name: &Option<String>) {
+    let (device, port_in, port_out) = match super::resolve_ports(device_name) {
+        Some(t) => t,
+        None => return,
+    };
+
+    let mut manager = match MidiManager::new() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Cannot create MIDI manager: {e}");
+            return;
+        }
+    };
+
+    let dispatcher = match manager.connect_with_dispatcher(port_in, port_out) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Cannot connect to {}: {e}", device.model);
+            return;
+        }
+    };
+
+    // Step 1: basic response → preset number + active scene
+    if let Err(e) = manager.send_sysex(&CURRENT_PRESET_BASIC) {
+        eprintln!("Failed to send preset basic request: {e}");
+        return;
+    }
+    let basic_resp = match dispatcher.await_response(&BASIC_HEADER, TIMEOUT).await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("No basic preset response: {e}");
+            return;
+        }
+    };
+    let basic = match Preset::extract_current_preset_basic_data(&basic_resp) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to parse basic preset data: {e}");
+            return;
+        }
+    };
+
+    let scene_letter = match basic.active_scene_number {
+        Some(0) => 'A',
+        Some(1) => 'B',
+        Some(2) => 'C',
+        Some(3) => 'D',
+        _ => '?',
+    };
+    println!("Preset:  {} (slot {})", basic.get_preset_code(), basic.number);
+    println!("Scene:   S{scene_letter}");
+
+    // Step 2: detail response → name, tempo, effect order, scenes
+    if let Err(e) = manager.send_sysex(&mg30_request_preset(basic.number)) {
+        eprintln!("Failed to send preset detail request: {e}");
+        return;
+    }
+    let detail_resp = match dispatcher.await_response(&DETAIL_HEADER, TIMEOUT).await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("No detail preset response: {e}");
+            return;
+        }
+    };
+
+    println!("Raw detail response ({} bytes):", detail_resp.len());
+    for (i, chunk) in detail_resp.chunks(16).enumerate() {
+        print!("  [{:03}] ", i * 16);
+        for b in chunk {
+            print!("{b:02X} ");
+        }
+        println!();
+    }
+
+    match Preset::extract_current_preset_detail_data(&detail_resp) {
+        Ok(preset) => {
+            println!("Name:    {}", preset.name);
+            let bpm = if preset.tempo > 0 { 60_000 / preset.tempo } else { 0 };
+            println!("Tempo:   {bpm} BPM (raw: {})", preset.tempo);
+            println!("Parallel:{}", preset.parallel);
+            let order: Vec<&str> = preset.effect_order.iter().map(|e| e.as_str()).collect();
+            println!("Chain:   {}", order.join(" → "));
+            for (i, scene) in preset.scenes.iter().enumerate() {
+                println!("Scene {}:  {:02X} {:02X} {:02X}", i + 1, scene.0[0], scene.0[1], scene.0[2]);
+            }
+        }
+        Err(e) => eprintln!("Failed to parse detail data: {e}"),
     }
 }
