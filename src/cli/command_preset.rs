@@ -96,6 +96,15 @@ async fn show(device_name: &Option<String>) {
             return;
         }
     };
+    println!("Raw basic response ({} bytes):", basic_resp.len());
+    for (i, chunk) in basic_resp.chunks(16).enumerate() {
+        print!("  [{:03}] ", i * 16);
+        for b in chunk {
+            print!("{b:02X} ");
+        }
+        println!();
+    }
+
     let basic = match Preset::extract_current_preset_basic_data(&basic_resp) {
         Ok(p) => p,
         Err(e) => {
@@ -126,6 +135,19 @@ async fn show(device_name: &Option<String>) {
             return;
         }
     };
+
+    // GEN2: BPM at bytes 144 (sync state) and 147 (value)
+    // Formula: BPM = (byte_147 + 128) / 2
+    // Confirmed at BPM 98 (0x44) and BPM 120 (0x70)
+    if detail_resp.len() > 147 {
+        let sync_on = detail_resp[144] != 0x00;
+        let bpm = (detail_resp[147] as u16 + 128) / 2;
+        if sync_on {
+            println!("BPM:     {bpm} (sync on)");
+        } else {
+            println!("BPM:     {bpm} (sync off)");
+        }
+    }
 
     println!("Raw detail response ({} bytes):", detail_resp.len());
     for (i, chunk) in detail_resp.chunks(16).enumerate() {
