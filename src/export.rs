@@ -203,6 +203,7 @@ mod tests {
                     range_start: Some(0),
                     range_end: Some(127),
                 }],
+                ..Default::default()
             },
         );
         Preset {

@@ -75,7 +75,9 @@ impl Cli {
                 }
             }
             Commands::Info => command_info::run(&self.device_name).await,
-            Commands::Preset { action } => command_preset::run(&self.device_name, action, format).await,
+            Commands::Preset { action } => {
+                command_preset::run(&self.device_name, action, format).await
+            }
             Commands::Effect {
                 ref effect,
                 ref parameters,
@@ -243,24 +245,43 @@ fn send_raw(data: &[u8]) {
     use midir::MidiOutput;
     let midi_out = match MidiOutput::new("nux-raw") {
         Ok(o) => o,
-        Err(e) => { eprintln!("MIDI init error: {e}"); return; }
+        Err(e) => {
+            eprintln!("MIDI init error: {e}");
+            return;
+        }
     };
     let ports = midi_out.ports();
     let port = match ports.iter().find(|p| {
-        midi_out.port_name(p).map(|n| n.to_lowercase().contains("nux")).unwrap_or(false)
+        midi_out
+            .port_name(p)
+            .map(|n| n.to_lowercase().contains("nux"))
+            .unwrap_or(false)
     }) {
         Some(p) => p,
-        None => { eprintln!("No NUX device found"); return; }
+        None => {
+            eprintln!("No NUX device found");
+            return;
+        }
     };
     let mut conn = match midi_out.connect(port, "nux-raw-out") {
         Ok(c) => c,
-        Err(e) => { eprintln!("MIDI connect error: {e}"); return; }
+        Err(e) => {
+            eprintln!("MIDI connect error: {e}");
+            return;
+        }
     };
     let mut msg = vec![0xF0, 0x43];
     msg.extend_from_slice(data);
     msg.push(0xF7);
     match conn.send(&msg) {
-        Ok(()) => println!("Sent {} bytes: {}", msg.len(), msg.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ")),
+        Ok(()) => println!(
+            "Sent {} bytes: {}",
+            msg.len(),
+            msg.iter()
+                .map(|b| format!("{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
         Err(e) => eprintln!("Send error: {e}"),
     }
 }

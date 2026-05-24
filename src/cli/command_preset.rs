@@ -120,7 +120,11 @@ async fn show(device_name: &Option<String>) {
         Some(3) => 'D',
         _ => '?',
     };
-    println!("Preset:  {} (slot {})", basic.get_preset_code(), basic.number);
+    println!(
+        "Preset:  {} (slot {})",
+        basic.get_preset_code(),
+        basic.number
+    );
     println!("Scene:   S{scene_letter}");
 
     // Step 2: detail response → name, tempo, effect order, scenes
@@ -161,13 +165,23 @@ async fn show(device_name: &Option<String>) {
     match Preset::extract_current_preset_detail_data(&detail_resp) {
         Ok(preset) => {
             println!("Name:    {}", preset.name);
-            let bpm = if preset.tempo > 0 { 60_000 / preset.tempo } else { 0 };
+            let bpm = if preset.tempo > 0 {
+                60_000 / preset.tempo
+            } else {
+                0
+            };
             println!("Tempo:   {bpm} BPM (raw: {})", preset.tempo);
             println!("Parallel:{}", preset.parallel);
             let order: Vec<&str> = preset.effect_order.iter().map(|e| e.as_str()).collect();
             println!("Chain:   {}", order.join(" → "));
             for (i, scene) in preset.scenes.iter().enumerate() {
-                println!("Scene {}:  {:02X} {:02X} {:02X}", i + 1, scene.0[0], scene.0[1], scene.0[2]);
+                println!(
+                    "Scene {}:  {:02X} {:02X} {:02X}",
+                    i + 1,
+                    scene.0[0],
+                    scene.0[1],
+                    scene.0[2]
+                );
             }
         }
         Err(e) => eprintln!("Failed to parse detail data: {e}"),

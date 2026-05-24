@@ -8,7 +8,7 @@
 
 use std::{collections::HashMap, sync::LazyLock};
 
-use super::{EffectOption, KnobDef};
+use super::{EffectOption, FirmwareGen, KnobDef};
 
 fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
     KnobDef {
@@ -183,6 +183,21 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
                     knob("balance", "BALANCE", 46, 100),
                     knob("speed", "SPEED", 47, 100),
                     knob("subdiv", "SUB DIV", 48, 6),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x1C,
+            EffectOption {
+                id: 0x1C,
+                title: "Mono Octave",
+                min_gen: FirmwareGen::Gen2,
+                // ID provisional — knob order from device UI
+                knobs: vec![
+                    knob("sub", "SUB", 46, 100),
+                    knob("dry", "DRY", 47, 100),
+                    knob("up", "UP", 48, 100),
                 ],
                 ..Default::default()
             },

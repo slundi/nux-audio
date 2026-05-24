@@ -1,4 +1,5 @@
 use crate::error::NuxError;
+use std::collections::HashMap;
 
 pub mod amp;
 pub mod compression;
@@ -18,7 +19,26 @@ pub const CC_BYPASS_ON: u8 = 0x7F;
 /// MIDI CC value that bypasses an effect slot (boolean false in MIDI).
 pub const CC_BYPASS_OFF: u8 = 0x00;
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+/// Hardware generation of the connected MG-30.
+///
+/// GEN1 = firmware ≤ 4.x (218-byte detail response, original model set).
+/// GEN2 = firmware ≥ 5.x (222-byte detail response, expanded model set).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
+pub enum FirmwareGen {
+    #[default]
+    Gen1,
+    Gen2,
+}
+
+impl FirmwareGen {
+    /// Derive generation from the firmware major version number.
+    /// Major ≥ 5 → Gen2 (GEN2 hardware, fw 5.x+); anything lower → Gen1.
+    pub fn from_major(major: u8) -> Self {
+        if major >= 5 { Self::Gen2 } else { Self::Gen1 }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 #[repr(u8)]
 pub enum EffectCategory {
     Wah = 0,
@@ -85,7 +105,7 @@ impl EffectCategory {
             9 => Some(EffectCategory::Ir),
             10 => Some(EffectCategory::Sr),
             11 => Some(EffectCategory::Vol),
-            _ => None, // Handle any value that doesn't match an enum variant
+            _ => None,
         }
     }
 }
@@ -125,11 +145,13 @@ pub struct EffectOption<'a> {
     pub category_color: u32,
     pub knobs: Vec<KnobDef<'a>>,
     pub dominant_color: Option<u32>,
+    /// Minimum firmware generation required for this model.
+    /// Defaults to `Gen1` (available on all hardware).
+    pub min_gen: FirmwareGen,
 }
 
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct Effect<'a> {
-    // pub byte: Option<u8>,
     pub category: EffectCategory,
     pub start_off_byte: u8,
     pub start_on_byte: u8,
@@ -153,6 +175,36 @@ pub struct KnobState {
     pub value: u8,
 }
 
+/// Return the static model catalog for a category, or `None` for Vol/Sr.
+fn models_map(category: EffectCategory) -> Option<&'static HashMap<u8, EffectOption<'static>>> {
+    Some(match category {
+        EffectCategory::Wah => &wah::MODELS,
+        EffectCategory::Comp => &compression::MODELS,
+        EffectCategory::Efx => &efx::MODELS,
+        EffectCategory::Amp => &amp::MODELS,
+        EffectCategory::Eq => &equalizer::MODELS,
+        EffectCategory::Gate => &gate::MODELS,
+        EffectCategory::Mod => &modulation::MODELS,
+        EffectCategory::Delay => &delay::MODELS,
+        EffectCategory::Reverb => &reverb::MODELS,
+        EffectCategory::Ir => &ir::MODELS,
+        EffectCategory::Vol | EffectCategory::Sr => return None,
+    })
+}
+
+/// Look up an effect model by ID, respecting firmware generation.
+///
+/// Returns `None` if the model is not in the catalog, or if it requires a newer
+/// generation than `gen` (i.e. `model.min_gen > gen`).
+pub fn get_model(
+    category: EffectCategory,
+    model_id: u8,
+    fw_gen: FirmwareGen,
+) -> Option<&'static EffectOption<'static>> {
+    let opt = models_map(category)?.get(&model_id)?;
+    (opt.min_gen <= fw_gen).then_some(opt)
+}
+
 /// Parse a MG-30 `CURRENT_PRESET_BASIC` SysEx response into an `Effect`.
 ///
 /// Expected response header: `[0xF0, 0x43, 0x58, 0x70, 0x15, 0x02, ...]`
@@ -160,7 +212,7 @@ pub struct KnobState {
 /// Byte offsets are provisional and must be verified against hardware captures:
 ///   `CATEGORY_OFFSET` — byte encoding the effect slot (maps to `EffectCategory`)
 ///   `MODEL_ID_OFFSET` — byte encoding the selected model within that slot
-pub fn extract_effects(response: &[u8]) -> Result<Effect<'static>, NuxError> {
+pub fn extract_effects(response: &[u8], fw_gen: FirmwareGen) -> Result<Effect<'static>, NuxError> {
     // TODO: verify these offsets from hardware SysEx captures
     const CATEGORY_OFFSET: usize = 6;
     const MODEL_ID_OFFSET: usize = 7;
@@ -178,21 +230,7 @@ pub fn extract_effects(response: &[u8]) -> Result<Effect<'static>, NuxError> {
     let category = EffectCategory::from_u8(category_byte)
         .ok_or(NuxError::UnknownEffectCategory(category_byte))?;
 
-    let option = match &category {
-        EffectCategory::Wah => wah::MODELS.get(&model_id),
-        EffectCategory::Comp => compression::MODELS.get(&model_id),
-        EffectCategory::Efx => efx::MODELS.get(&model_id),
-        EffectCategory::Amp => amp::MODELS.get(&model_id),
-        EffectCategory::Eq => equalizer::MODELS.get(&model_id),
-        EffectCategory::Gate => gate::MODELS.get(&model_id),
-        EffectCategory::Mod => modulation::MODELS.get(&model_id),
-        EffectCategory::Delay => delay::MODELS.get(&model_id),
-        EffectCategory::Reverb => reverb::MODELS.get(&model_id),
-        EffectCategory::Ir => ir::MODELS.get(&model_id),
-        // Vol/Sr have no model catalog — knobs are always available
-        EffectCategory::Vol | EffectCategory::Sr => None,
-    }
-    .ok_or(NuxError::UnknownEffectModel {
+    let option = get_model(category, model_id, fw_gen).ok_or(NuxError::UnknownEffectModel {
         category_byte,
         model_id,
     })?;
@@ -245,30 +283,20 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxErro
     Ok(effects)
 }
 
-/// Look up an effect model by name (case-insensitive) within a category's static catalog.
+/// Look up an effect model by name (case-insensitive) within a category's static catalog,
+/// filtered by firmware generation.
 ///
 /// Returns `(model_id, &EffectOption)` for the first model whose `title` matches
-/// `name`.  Returns `None` when the category has no catalog (`Vol`, `Sr`) or
-/// when no model title matches.
+/// `name` and whose `min_gen <= gen`.  Returns `None` when the category has no
+/// catalog (`Vol`, `Sr`) or when no matching model title is found.
 pub fn find_model_by_name(
     category: EffectCategory,
     name: &str,
+    fw_gen: FirmwareGen,
 ) -> Option<(u8, &'static EffectOption<'static>)> {
-    let models: &std::collections::HashMap<u8, EffectOption<'static>> = match category {
-        EffectCategory::Wah => &wah::MODELS,
-        EffectCategory::Comp => &compression::MODELS,
-        EffectCategory::Efx => &efx::MODELS,
-        EffectCategory::Amp => &amp::MODELS,
-        EffectCategory::Eq => &equalizer::MODELS,
-        EffectCategory::Gate => &gate::MODELS,
-        EffectCategory::Mod => &modulation::MODELS,
-        EffectCategory::Delay => &delay::MODELS,
-        EffectCategory::Reverb => &reverb::MODELS,
-        EffectCategory::Ir => &ir::MODELS,
-        EffectCategory::Vol | EffectCategory::Sr => return None,
-    };
-    models
+    models_map(category)?
         .iter()
+        .filter(|(_, opt)| opt.min_gen <= fw_gen)
         .find(|(_, opt)| opt.title.eq_ignore_ascii_case(name))
         .map(|(k, v)| (*k, v))
 }
@@ -283,20 +311,7 @@ pub fn find_model_by_name(
 /// in the catalog defines a knob with the given `id`.  In those cases the caller should
 /// ask the user to supply the CC number directly.
 pub fn find_cc_for_knob(category: EffectCategory, knob_id: &str) -> Option<u8> {
-    let models: &std::collections::HashMap<u8, EffectOption<'static>> = match category {
-        EffectCategory::Wah => &wah::MODELS,
-        EffectCategory::Comp => &compression::MODELS,
-        EffectCategory::Efx => &efx::MODELS,
-        EffectCategory::Amp => &amp::MODELS,
-        EffectCategory::Eq => &equalizer::MODELS,
-        EffectCategory::Gate => &gate::MODELS,
-        EffectCategory::Mod => &modulation::MODELS,
-        EffectCategory::Delay => &delay::MODELS,
-        EffectCategory::Reverb => &reverb::MODELS,
-        EffectCategory::Ir => &ir::MODELS,
-        EffectCategory::Vol | EffectCategory::Sr => return None,
-    };
-    for opt in models.values() {
+    for opt in models_map(category)?.values() {
         if let Some(knob) = opt.knobs.iter().find(|k| k.id == knob_id) {
             return Some(knob.ctrl);
         }
@@ -342,6 +357,46 @@ mod tests {
             assert_eq!(cat as u8, v);
         }
         assert!(EffectCategory::from_u8(12).is_none());
+    }
+
+    // ── FirmwareGen ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_firmware_gen_ordering() {
+        assert!(FirmwareGen::Gen1 < FirmwareGen::Gen2);
+    }
+
+    #[test]
+    fn test_firmware_gen_from_major() {
+        assert_eq!(FirmwareGen::from_major(4), FirmwareGen::Gen1);
+        assert_eq!(FirmwareGen::from_major(5), FirmwareGen::Gen2);
+        assert_eq!(FirmwareGen::from_major(6), FirmwareGen::Gen2);
+        assert_eq!(FirmwareGen::from_major(0), FirmwareGen::Gen1);
+    }
+
+    #[test]
+    fn test_get_model_gen2_only_hidden_from_gen1() {
+        // Damp (0x0C) is Gen2-only — must not be visible to Gen1
+        assert!(get_model(EffectCategory::Reverb, 0x0C, FirmwareGen::Gen1).is_none());
+        assert!(get_model(EffectCategory::Reverb, 0x0C, FirmwareGen::Gen2).is_some());
+    }
+
+    #[test]
+    fn test_get_model_gen1_visible_to_gen2() {
+        // Room (0x00) is Gen1 — must also be visible to Gen2
+        assert!(get_model(EffectCategory::Reverb, 0x00, FirmwareGen::Gen1).is_some());
+        assert!(get_model(EffectCategory::Reverb, 0x00, FirmwareGen::Gen2).is_some());
+    }
+
+    #[test]
+    fn test_get_model_unknown_id() {
+        assert!(get_model(EffectCategory::Reverb, 0xFF, FirmwareGen::Gen2).is_none());
+    }
+
+    #[test]
+    fn test_get_model_vol_sr_none() {
+        assert!(get_model(EffectCategory::Vol, 0x00, FirmwareGen::Gen2).is_none());
+        assert!(get_model(EffectCategory::Sr, 0x00, FirmwareGen::Gen2).is_none());
     }
 
     // ── Catalog validation ────────────────────────────────────────────────────
@@ -412,11 +467,7 @@ mod tests {
     ///   Wah CC11–12 | Comp CC13–15,90 | Efx CC17–21 | Amp CC22–29
     ///   Eq CC30–41  | Gate CC42–45    | Mod CC46–51  | Delay CC52–59
     ///   Reverb CC60–63 | Ir CC64–69  | Vol CC70–72
-    fn assert_ccs_in_range(
-        models: &std::collections::HashMap<u8, EffectOption<'static>>,
-        slot: &str,
-        valid: &[u8],
-    ) {
+    fn assert_ccs_in_range(models: &HashMap<u8, EffectOption<'static>>, slot: &str, valid: &[u8]) {
         for (id, opt) in models {
             for knob in &opt.knobs {
                 assert!(
@@ -488,7 +539,7 @@ mod tests {
     #[test]
     fn test_find_model_by_name_found() {
         // "Dist+" is in the EFX catalog at id 0x40
-        let result = find_model_by_name(EffectCategory::Efx, "Dist+");
+        let result = find_model_by_name(EffectCategory::Efx, "Dist+", FirmwareGen::Gen2);
         assert!(result.is_some());
         let (id, opt) = result.unwrap();
         assert_eq!(id, 0x40);
@@ -497,20 +548,30 @@ mod tests {
 
     #[test]
     fn test_find_model_by_name_case_insensitive() {
-        let result = find_model_by_name(EffectCategory::Efx, "dist+");
+        let result = find_model_by_name(EffectCategory::Efx, "dist+", FirmwareGen::Gen2);
         assert!(result.is_some());
         assert_eq!(result.unwrap().0, 0x40);
     }
 
     #[test]
     fn test_find_model_by_name_not_found() {
-        assert!(find_model_by_name(EffectCategory::Amp, "Nonexistent Model").is_none());
+        assert!(
+            find_model_by_name(EffectCategory::Amp, "Nonexistent Model", FirmwareGen::Gen2)
+                .is_none()
+        );
     }
 
     #[test]
     fn test_find_model_by_name_vol_sr_none() {
-        assert!(find_model_by_name(EffectCategory::Vol, "Volume").is_none());
-        assert!(find_model_by_name(EffectCategory::Sr, "Send").is_none());
+        assert!(find_model_by_name(EffectCategory::Vol, "Volume", FirmwareGen::Gen2).is_none());
+        assert!(find_model_by_name(EffectCategory::Sr, "Send", FirmwareGen::Gen2).is_none());
+    }
+
+    #[test]
+    fn test_find_model_by_name_gen_filter() {
+        // "Damp" (0x0C) is Gen2-only — must not appear when querying Gen1
+        assert!(find_model_by_name(EffectCategory::Reverb, "Damp", FirmwareGen::Gen1).is_none());
+        assert!(find_model_by_name(EffectCategory::Reverb, "Damp", FirmwareGen::Gen2).is_some());
     }
 
     #[test]

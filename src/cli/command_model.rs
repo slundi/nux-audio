@@ -3,7 +3,7 @@
 // Accepts a model by hex ID (0x45), decimal ID (69), or case-insensitive name.
 // Wire format is provisional — not yet verified against hardware captures.
 
-use crate::effects::{EffectCategory, find_model_by_name};
+use crate::effects::{EffectCategory, FirmwareGen, find_model_by_name};
 use crate::midi::MidiManager;
 use nux_audio::nux_sys_ex_commands::mg30_change_effect_model;
 
@@ -40,7 +40,8 @@ pub async fn run(device_name: &Option<String>, category_str: &str, model_str: &s
     } else if let Ok(id) = model_str.parse::<u8>() {
         (id, None)
     } else {
-        match find_model_by_name(category, model_str) {
+        // TODO: derive gen from firmware version query; Gen2 is our only tested platform
+        match find_model_by_name(category, model_str, FirmwareGen::Gen2) {
             Some((id, opt)) => (id, Some(opt.title)),
             None => {
                 eprintln!(

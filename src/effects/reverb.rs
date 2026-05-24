@@ -4,11 +4,12 @@
 // Bypass CC: 8
 // Knob CCs: KNOB1-4 = CC60..CC63
 //
-// IDs are provisional — sequential from 0x30.
+// Model IDs confirmed from hardware byte 21 of detail SysEx response.
+// Damp (0x0C) confirmed from hardware.
 
 use std::{collections::HashMap, sync::LazyLock};
 
-use super::{EffectOption, KnobDef};
+use super::{EffectOption, FirmwareGen, KnobDef};
 
 fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
     KnobDef {
@@ -24,9 +25,9 @@ fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
 pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
     HashMap::from([
         (
-            0x30,
+            0x00,
             EffectOption {
-                id: 0x30,
+                id: 0x00,
                 title: "Room",
                 knobs: vec![
                     knob("decay", "DECAY", 60),
@@ -37,9 +38,9 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             },
         ),
         (
-            0x31,
+            0x04,
             EffectOption {
-                id: 0x31,
+                id: 0x04,
                 title: "Hall",
                 knobs: vec![
                     knob("decay", "DECAY", 60),
@@ -51,33 +52,43 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             },
         ),
         (
-            0x32,
+            0x06,
             EffectOption {
-                id: 0x32,
+                id: 0x06,
                 title: "Plate",
                 knobs: vec![knob("decay", "DECAY", 60), knob("level", "LEVEL", 61)],
                 ..Default::default()
             },
         ),
         (
-            0x33,
+            0x08,
             EffectOption {
-                id: 0x33,
+                id: 0x08,
                 title: "Spring",
                 knobs: vec![knob("decay", "DECAY", 60), knob("level", "LEVEL", 61)],
                 ..Default::default()
             },
         ),
         (
-            0x34,
+            0x0A,
             EffectOption {
-                id: 0x34,
+                id: 0x0A,
                 title: "Shimmer",
                 knobs: vec![
                     knob("mix", "MIX", 60),
                     knob("decay", "DECAY", 61),
                     knob("shim", "SHIM", 62),
                 ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x0C,
+            EffectOption {
+                id: 0x0C,
+                title: "Damp",
+                min_gen: FirmwareGen::Gen2,
+                knobs: vec![knob("mix", "MIX", 60), knob("depth", "DEPTH", 61)],
                 ..Default::default()
             },
         ),

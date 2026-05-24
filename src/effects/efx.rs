@@ -10,7 +10,7 @@
 
 use std::{collections::HashMap, sync::LazyLock};
 
-use super::{EffectOption, KnobDef};
+use super::{EffectOption, FirmwareGen, KnobDef};
 
 fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
     KnobDef {
@@ -205,6 +205,81 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
                     knob("sens", "SENSITIVITY", 17, 100),
                     knob("range", "RANGE", 18, 100),
                     knob("level", "LEVEL", 19, 100),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x4E,
+            EffectOption {
+                id: 0x4E,
+                title: "Full-OD HP",
+                min_gen: FirmwareGen::Gen2,
+                // ID provisional — knob order from device UI
+                knobs: vec![
+                    knob("volume", "VOLUME", 17, 100),
+                    knob("drive", "DRIVE", 18, 100),
+                    knob("tone", "TONE", 19, 100),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x4F,
+            EffectOption {
+                id: 0x4F,
+                title: "Horseman OD",
+                min_gen: FirmwareGen::Gen2,
+                // ID provisional — knob order from device UI
+                knobs: vec![
+                    knob("gain", "GAIN", 17, 100),
+                    knob("treble", "TREBLE", 18, 100),
+                    knob("output", "OUTPUT", 19, 100),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x50,
+            EffectOption {
+                id: 0x50,
+                title: "Nob ODR",
+                min_gen: FirmwareGen::Gen2,
+                // ID provisional — knob order from device UI
+                knobs: vec![
+                    knob("drive", "DRIVE", 17, 100),
+                    knob("level", "LEVEL", 18, 100),
+                    knob("spectrum", "SPECTRUM", 19, 100),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x51,
+            EffectOption {
+                id: 0x51,
+                title: "Riv Bluefog",
+                min_gen: FirmwareGen::Gen2,
+                // ID provisional — knob order from device UI
+                knobs: vec![
+                    knob("level", "LEVEL", 17, 100),
+                    knob("gain", "GAIN", 18, 100),
+                    knob("tone", "TONE", 19, 100),
+                ],
+                ..Default::default()
+            },
+        ),
+        (
+            0x52,
+            EffectOption {
+                id: 0x52,
+                title: "Turbo OD",
+                min_gen: FirmwareGen::Gen2,
+                // ID provisional — knob order from device UI
+                knobs: vec![
+                    knob("level", "LEVEL", 17, 100),
+                    knob("tone", "TONE", 18, 100),
+                    knob("drive", "DRIVE", 19, 100),
                 ],
                 ..Default::default()
             },
