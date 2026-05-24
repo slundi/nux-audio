@@ -3,7 +3,6 @@
 // Exposes `EffectParameter`, `KnobIdentifier`, parameter parsers, and `run()`.
 
 use crate::effects::{EffectCategory, find_cc_for_knob};
-use crate::midi::MidiManager;
 
 #[derive(Debug, Clone)]
 pub struct EffectParameter {
@@ -74,23 +73,10 @@ pub async fn run(device_name: &Option<String>, effect: &str, parameters: &[Effec
         }
     };
 
-    let (device, _port_in, port_out) = match super::resolve_ports(device_name) {
-        Some(t) => t,
+    let mut session = match super::connect_and_detect(device_name).await {
+        Some(s) => s,
         None => return,
     };
-
-    let mut manager = match MidiManager::new() {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Cannot create MIDI manager: {e}");
-            return;
-        }
-    };
-
-    if let Err(e) = manager.connect_output(port_out) {
-        eprintln!("Cannot connect to {}: {e}", device.model);
-        return;
-    }
 
     let mut errors = 0usize;
     for param in parameters {
@@ -109,12 +95,12 @@ pub async fn run(device_name: &Option<String>, effect: &str, parameters: &[Effec
                 }
             },
         };
-        match manager.send_cc(cc, param.value) {
+        match session.manager.send_cc(cc, param.value) {
             Ok(()) => println!(
                 "CC{cc}={} → {} ({})",
                 param.value,
                 category.as_str(),
-                device.model
+                session.device.model
             ),
             Err(e) => {
                 eprintln!("Failed to send CC{cc}={}: {e}", param.value);

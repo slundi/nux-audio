@@ -3,8 +3,7 @@
 // Accepts a model by hex ID (0x45), decimal ID (69), or case-insensitive name.
 // Wire format is provisional — not yet verified against hardware captures.
 
-use crate::effects::{EffectCategory, FirmwareGen, find_model_by_name};
-use crate::midi::MidiManager;
+use crate::effects::{EffectCategory, find_model_by_name};
 use nux_audio::nux_sys_ex_commands::mg30_change_effect_model;
 
 /// Switch the active model within an effect slot.
@@ -25,6 +24,12 @@ pub async fn run(device_name: &Option<String>, category_str: &str, model_str: &s
         }
     };
 
+    // Connect first so fw_gen is available for catalog name lookups
+    let mut session = match super::connect_and_detect(device_name).await {
+        Some(s) => s,
+        None => return,
+    };
+
     // Resolve model: hex (0x…), decimal, or name search
     let (model_id, model_title) = if let Some(hex) = model_str
         .strip_prefix("0x")
@@ -40,8 +45,7 @@ pub async fn run(device_name: &Option<String>, category_str: &str, model_str: &s
     } else if let Ok(id) = model_str.parse::<u8>() {
         (id, None)
     } else {
-        // TODO: derive gen from firmware version query; Gen2 is our only tested platform
-        match find_model_by_name(category, model_str, FirmwareGen::Gen2) {
+        match find_model_by_name(category, model_str, session.fw_gen) {
             Some((id, opt)) => (id, Some(opt.title)),
             None => {
                 eprintln!(
@@ -53,32 +57,14 @@ pub async fn run(device_name: &Option<String>, category_str: &str, model_str: &s
         }
     };
 
-    let (device, _port_in, port_out) = match super::resolve_ports(device_name) {
-        Some(t) => t,
-        None => return,
-    };
-
-    let mut manager = match MidiManager::new() {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Cannot create MIDI manager: {e}");
-            return;
-        }
-    };
-
-    if let Err(e) = manager.connect_output(port_out) {
-        eprintln!("Cannot connect to {}: {e}", device.model);
-        return;
-    }
-
     let payload = mg30_change_effect_model(category as u8, model_id);
-    match manager.send_sysex(&payload) {
+    match session.manager.send_sysex(&payload) {
         Ok(()) => {
             let name_part = model_title.map(|t| format!(" ({t})")).unwrap_or_default();
             println!(
                 "{} model → 0x{model_id:02X}{name_part} [provisional SysEx] ({})",
                 category.as_str(),
-                device.model
+                session.device.model
             );
         }
         Err(e) => eprintln!("Failed to send model change SysEx: {e}"),

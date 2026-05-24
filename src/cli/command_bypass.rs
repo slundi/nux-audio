@@ -4,7 +4,6 @@
 // The CC number is read from `EffectCategory::bypass_cc()`.
 
 use crate::effects::{CC_BYPASS_OFF, CC_BYPASS_ON, EffectCategory};
-use crate::midi::MidiManager;
 
 /// Whether to activate or bypass an effect slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,30 +44,17 @@ pub async fn run(device_name: &Option<String>, category_str: &str, state: Bypass
         }
     };
 
-    let (device, _port_in, port_out) = match super::resolve_ports(device_name) {
-        Some(t) => t,
+    let mut session = match super::connect_and_detect(device_name).await {
+        Some(s) => s,
         None => return,
     };
-
-    let mut manager = match MidiManager::new() {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Cannot create MIDI manager: {e}");
-            return;
-        }
-    };
-
-    if let Err(e) = manager.connect_output(port_out) {
-        eprintln!("Cannot connect to {}: {e}", device.model);
-        return;
-    }
 
     let value = match state {
         BypassState::On => CC_BYPASS_ON,
         BypassState::Off => CC_BYPASS_OFF,
     };
 
-    match manager.send_cc(cc, value) {
+    match session.manager.send_cc(cc, value) {
         Ok(()) => println!(
             "{} {} → CC{cc}=0x{value:02X} ({})",
             category.as_str(),
@@ -77,7 +63,7 @@ pub async fn run(device_name: &Option<String>, category_str: &str, state: Bypass
             } else {
                 "OFF"
             },
-            device.model
+            session.device.model
         ),
         Err(e) => eprintln!("Failed to send bypass CC: {e}"),
     }

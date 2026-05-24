@@ -31,10 +31,17 @@ pub enum FirmwareGen {
 }
 
 impl FirmwareGen {
-    /// Derive generation from the firmware major version number.
-    /// Major ≥ 5 → Gen2 (GEN2 hardware, fw 5.x+); anything lower → Gen1.
-    pub fn from_major(major: u8) -> Self {
-        if major >= 5 { Self::Gen2 } else { Self::Gen1 }
+    /// Derive generation from the version string returned by the device (e.g. `"v602"`).
+    ///
+    /// Strips a leading `v`, parses the remainder as an integer, and compares against
+    /// the confirmed GEN2 threshold: **≥ 600** → `Gen2`, otherwise `Gen1`.
+    /// Defaults to `Gen1` on any parse failure (conservative).
+    pub fn from_version_str(version: &str) -> Self {
+        let stripped = version.strip_prefix('v').unwrap_or(version);
+        match stripped.parse::<u16>() {
+            Ok(n) if n >= 600 => Self::Gen2,
+            _ => Self::Gen1,
+        }
     }
 }
 
@@ -367,11 +374,16 @@ mod tests {
     }
 
     #[test]
-    fn test_firmware_gen_from_major() {
-        assert_eq!(FirmwareGen::from_major(4), FirmwareGen::Gen1);
-        assert_eq!(FirmwareGen::from_major(5), FirmwareGen::Gen2);
-        assert_eq!(FirmwareGen::from_major(6), FirmwareGen::Gen2);
-        assert_eq!(FirmwareGen::from_major(0), FirmwareGen::Gen1);
+    fn test_firmware_gen_from_version_str() {
+        assert_eq!(FirmwareGen::from_version_str("v602"), FirmwareGen::Gen2);
+        assert_eq!(FirmwareGen::from_version_str("v600"), FirmwareGen::Gen2);
+        assert_eq!(FirmwareGen::from_version_str("v599"), FirmwareGen::Gen1);
+        assert_eq!(FirmwareGen::from_version_str("v500"), FirmwareGen::Gen1);
+        // without 'v' prefix
+        assert_eq!(FirmwareGen::from_version_str("602"), FirmwareGen::Gen2);
+        // unparseable → conservative Gen1
+        assert_eq!(FirmwareGen::from_version_str("invalid"), FirmwareGen::Gen1);
+        assert_eq!(FirmwareGen::from_version_str(""), FirmwareGen::Gen1);
     }
 
     #[test]

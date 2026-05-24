@@ -1,7 +1,6 @@
 // Preset management: fetch from device and send preset files.
 
 use crate::export::OutputFormat;
-use crate::midi::MidiManager;
 use crate::preset::Preset;
 use clap::{Args, Subcommand};
 use nux_audio::nux_sys_ex_commands::{CURRENT_PRESET_BASIC, mg30_request_preset};
@@ -63,33 +62,23 @@ pub async fn run(device_name: &Option<String>, action: PresetAction, _format: Ou
 }
 
 async fn show(device_name: &Option<String>) {
-    let (device, port_in, port_out) = match super::resolve_ports(device_name) {
-        Some(t) => t,
+    let mut session = match super::connect_and_detect(device_name).await {
+        Some(s) => s,
         None => return,
     };
 
-    let mut manager = match MidiManager::new() {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Cannot create MIDI manager: {e}");
-            return;
-        }
-    };
-
-    let dispatcher = match manager.connect_with_dispatcher(port_in, port_out) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("Cannot connect to {}: {e}", device.model);
-            return;
-        }
-    };
+    println!("Firmware:  {} ({:?})", session.version_str, session.fw_gen);
 
     // Step 1: basic response → preset number + active scene
-    if let Err(e) = manager.send_sysex(&CURRENT_PRESET_BASIC) {
+    if let Err(e) = session.manager.send_sysex(&CURRENT_PRESET_BASIC) {
         eprintln!("Failed to send preset basic request: {e}");
         return;
     }
-    let basic_resp = match dispatcher.await_response(&BASIC_HEADER, TIMEOUT).await {
+    let basic_resp = match session
+        .dispatcher
+        .await_response(&BASIC_HEADER, TIMEOUT)
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             eprintln!("No basic preset response: {e}");
@@ -128,11 +117,18 @@ async fn show(device_name: &Option<String>) {
     println!("Scene:   S{scene_letter}");
 
     // Step 2: detail response → name, tempo, effect order, scenes
-    if let Err(e) = manager.send_sysex(&mg30_request_preset(basic.number)) {
+    if let Err(e) = session
+        .manager
+        .send_sysex(&mg30_request_preset(basic.number))
+    {
         eprintln!("Failed to send preset detail request: {e}");
         return;
     }
-    let detail_resp = match dispatcher.await_response(&DETAIL_HEADER, TIMEOUT).await {
+    let detail_resp = match session
+        .dispatcher
+        .await_response(&DETAIL_HEADER, TIMEOUT)
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             eprintln!("No detail preset response: {e}");

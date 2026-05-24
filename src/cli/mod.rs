@@ -8,13 +8,17 @@ mod command_model;
 mod command_preset;
 pub mod error;
 
-use crate::device::Device;
+use crate::device::{Device, extract_version};
+use crate::effects::FirmwareGen;
 use crate::export::OutputFormat;
+use crate::midi::{MidiDispatcher, MidiManager};
 use clap::{Parser, Subcommand};
 use command_bypass::parse_bypass_state;
 use command_devices::list as list_devices;
 use command_effect::parse_effect_parameters;
+use nux_audio::nux_sys_ex_commands::DEVICE_VERSION_REQUEST;
 use nux_audio::string::{decimal_string_to_vec_u8, hex_string_to_vec_u8};
+use std::time::Duration;
 
 // Re-export types that appear in the public Commands enum or tests
 pub use command_bypass::BypassState;
@@ -181,6 +185,77 @@ pub enum Commands {
         #[arg(long)]
         with_prefixes: bool,
     },
+}
+
+const VERSION_HEADER: [u8; 4] = [0xF0, 0x43, 0x58, 0x10];
+const VERSION_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// All state resulting from a successful device connection and firmware version detection.
+struct DeviceSession {
+    device: Device,
+    manager: MidiManager,
+    dispatcher: MidiDispatcher,
+    fw_gen: FirmwareGen,
+    version_str: String,
+}
+
+/// Connect to the NUX device, query firmware version, and detect the hardware generation.
+///
+/// Must be called before sending any other SysEx or MIDI CC messages so that
+/// version-dependent catalog lookups (e.g. Gen2-only effect models) use the right table.
+///
+/// Returns `None` on any failure (error already printed to stderr).
+async fn connect_and_detect(device_name: &Option<String>) -> Option<DeviceSession> {
+    let (device, port_in, port_out) = resolve_ports(device_name)?;
+
+    let mut manager = match MidiManager::new() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Cannot create MIDI manager: {e}");
+            return None;
+        }
+    };
+
+    let dispatcher = match manager.connect_with_dispatcher(port_in, port_out) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Cannot connect to {}: {e}", device.model);
+            return None;
+        }
+    };
+
+    if let Err(e) = manager.send_sysex(&DEVICE_VERSION_REQUEST) {
+        eprintln!("Failed to send version request: {e}");
+        return None;
+    }
+
+    let version_resp = match dispatcher
+        .await_response(&VERSION_HEADER, VERSION_TIMEOUT)
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Version query failed: {e}");
+            return None;
+        }
+    };
+
+    let version_str = match extract_version(&version_resp) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Could not parse firmware version: {e}");
+            return None;
+        }
+    };
+
+    let fw_gen = FirmwareGen::from_version_str(&version_str);
+    Some(DeviceSession {
+        device,
+        manager,
+        dispatcher,
+        fw_gen,
+        version_str,
+    })
 }
 
 /// Detect the target device and resolve its (port_in, port_out) MIDI port indices.
