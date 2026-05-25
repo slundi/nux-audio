@@ -129,7 +129,7 @@ impl PresetFile {
     pub fn to_string_fmt(&self, format: OutputFormat) -> Result<String, CliError> {
         match format {
             OutputFormat::Yaml => {
-                serde_yml::to_string(self).map_err(|e| CliError::Serialize(e.to_string()))
+                serde_saphyr::to_string(self).map_err(|e| CliError::Serialize(e.to_string()))
             }
             OutputFormat::Json => {
                 serde_json::to_string_pretty(self).map_err(|e| CliError::Serialize(e.to_string()))
@@ -141,7 +141,7 @@ impl PresetFile {
     pub fn from_str_fmt(content: &str, format: OutputFormat) -> Result<Self, CliError> {
         match format {
             OutputFormat::Yaml => {
-                serde_yml::from_str(content).map_err(|e| CliError::Deserialize(e.to_string()))
+                serde_saphyr::from_str(content).map_err(|e| CliError::Deserialize(e.to_string()))
             }
             OutputFormat::Json => {
                 serde_json::from_str(content).map_err(|e| CliError::Deserialize(e.to_string()))

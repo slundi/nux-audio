@@ -106,7 +106,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 
 ### Tasks
 
-* [ ] 6.1 **Persistence**: XDG local config and preset library stored as YAML via `serde-saphyr`.
+* [x] 6.1 **Persistence**: XDG local config and preset library stored as YAML via `serde-saphyr`.
   - `~/.local/share/nux-audio/config.toml` — last device, preferences.
   - `~/.local/share/nux-audio/presets/mg30.yaml` — one file per device model, all presets as a list.
   - Each preset entry carries `slot: Option<u8>` (null = local-only), `firmware_gen`, `name`, `modified` timestamp, and per-effect knob values.

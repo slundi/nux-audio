@@ -9,6 +9,7 @@ pub mod export;
 pub mod midi;
 pub mod preset;
 pub mod registry;
+pub mod storage;
 pub mod utils;
 
 // type SysExResponseData = DeviceVersion | Preset | Partial<Preset>;
