@@ -120,7 +120,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
   - Conflict popup (`[O]verride` / `[N]o` / `[R]ename+timestamp`) when slot already exists in library.
   - Transient status messages in status bar (auto-clears after ~3 s).
   - MIDI data currently mocked; real SysEx/CC integration is Phase 7.
-* [ ] 6.8 **Mouse support**: click to select preset/effect/knob.
+* [x] 6.8 **Mouse support**: tab-bar clicks, preset-list row click + scroll, chain-panel slot click, live-board slot/scene click, device picker click + scroll, drum pattern click + scroll, conflict popup O/N/R click zones.
 
 ## Phase 7: Community & Extensibility
 

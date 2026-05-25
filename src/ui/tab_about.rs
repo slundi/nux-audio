@@ -150,6 +150,14 @@ fn render_keybindings(frame: &mut Frame, area: Rect) {
         ("l", "Global", "Looper overlay"),
         ("D", "Global", "Drum machine overlay"),
         ("?", "Global", "This help screen (About tab)"),
+        ("Click row", "Preset list", "Select preset"),
+        ("Scroll", "Preset list", "Navigate presets"),
+        (
+            "Click slot",
+            "Chain panel / Live Board",
+            "Focus effect slot",
+        ),
+        ("Click tab", "Tab bar", "Switch tab"),
     ];
 
     let rows: Vec<Row> = bindings
