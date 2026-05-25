@@ -3,6 +3,7 @@
 use std::io;
 use std::time::Duration;
 
+use chrono::Utc;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -17,9 +18,12 @@ use ratatui::{
     widgets::Tabs,
 };
 
-use crate::storage::{Config, PresetLibrary, Storage};
+use crate::storage::{Config, LibraryEntry, PresetLibrary, Storage};
 
-use super::{overlay_device, overlay_drum, overlay_looper, tab_about, tab_liveboard, tab_presets};
+use super::{
+    overlay_conflict, overlay_device, overlay_drum, overlay_looper, tab_about, tab_liveboard,
+    tab_presets,
+};
 
 // ── Status icons (Nerd Fonts) ─────────────────────────────────────────────────
 
@@ -47,6 +51,19 @@ pub enum Overlay {
     DevicePicker,
     Looper,
     Drum,
+    Conflict,
+}
+
+// ── Conflict state ────────────────────────────────────────────────────────────
+
+/// State carried while the conflict overlay is visible.
+pub struct ConflictState {
+    /// The preset fetched from the device that would replace `existing`.
+    pub incoming: LibraryEntry,
+    /// The existing library entry that occupies the same slot.
+    pub existing: LibraryEntry,
+    /// Index of the existing entry in `library.presets`.
+    pub existing_idx: usize,
 }
 
 // ── Operation status ──────────────────────────────────────────────────────────
@@ -157,13 +174,17 @@ pub struct App {
     pub looper: LooperState,
     pub drum: DrumState,
     pub device_picker: DevicePickerState,
+    /// Active conflict data — `Some` only while `Overlay::Conflict` is shown.
+    pub conflict: Option<ConflictState>,
     /// Preset library loaded from XDG local storage.
     pub library: PresetLibrary,
     /// Monotonically increasing tick counter — used for spinner animation.
     pub tick: u64,
+    /// Ephemeral status message shown in the status bar.
+    /// The `u64` is the tick at which the message expires.
+    pub status_message: Option<(String, u64)>,
     #[allow(dead_code)] // used in future phases for preferences/save
     pub config: Config,
-    #[allow(dead_code)] // used in future phases for save/load operations
     storage: Storage,
 }
 
@@ -188,8 +209,10 @@ impl App {
             looper: LooperState::new(),
             drum: DrumState::default(),
             device_picker: DevicePickerState::default(),
+            conflict: None,
             library,
             tick: 0,
+            status_message: None,
             config,
             storage,
         }
@@ -281,6 +304,7 @@ impl App {
             Overlay::DevicePicker => self.handle_device_picker_key(key),
             Overlay::Looper => self.handle_looper_key(key),
             Overlay::Drum => self.handle_drum_key(key),
+            Overlay::Conflict => self.handle_conflict_key(key),
         }
     }
 
@@ -393,6 +417,12 @@ impl App {
             KeyCode::Tab => {
                 self.active_scene = (self.active_scene + 1) % 3;
             }
+            KeyCode::Char('g') if !self.chain_panel_active => {
+                self.action_get_from_device();
+            }
+            KeyCode::Char('s') if !self.chain_panel_active => {
+                self.action_send_to_device();
+            }
             KeyCode::Up | KeyCode::Char('k') if !self.chain_panel_active => {
                 self.preset_selected = self.preset_selected.saturating_sub(1);
             }
@@ -408,6 +438,125 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Pull the current preset from the connected device into the local library.
+    ///
+    /// If a local entry already exists for the same device slot, the conflict
+    /// overlay is opened to let the user choose [O]verride / [N]o / [R]ename.
+    fn action_get_from_device(&mut self) {
+        if self.operation_status != OperationStatus::Online {
+            self.set_status("Not connected — press d to select a device");
+            return;
+        }
+
+        let fw_gen = self
+            .device_info
+            .as_ref()
+            .map(|d| d.fw_version.clone())
+            .unwrap_or_else(|| "Gen2".to_owned());
+
+        // Build a placeholder entry (real data would come via async MIDI fetch).
+        let incoming = LibraryEntry {
+            slot: Some(0),
+            firmware_gen: fw_gen,
+            modified: Utc::now(),
+            name: "Device Preset".to_owned(),
+            tempo_ms: 500,
+            parallel: 0,
+            active_scene: 0,
+            effect_order: vec![
+                "Wah".to_owned(),
+                "Amp".to_owned(),
+                "Delay".to_owned(),
+                "Reverb".to_owned(),
+            ],
+            scenes: vec![],
+            effects: vec![],
+        };
+
+        // Check for a slot collision.
+        if let Some(idx) = self
+            .library
+            .presets
+            .iter()
+            .position(|p| p.slot == incoming.slot)
+        {
+            let existing = self.library.presets[idx].clone();
+            self.conflict = Some(ConflictState {
+                incoming,
+                existing,
+                existing_idx: idx,
+            });
+            self.active_overlay = Some(Overlay::Conflict);
+        } else {
+            self.library.presets.push(incoming);
+            let _ = self.storage.save_library(&self.library);
+            self.set_status("Preset pulled from device");
+        }
+    }
+
+    /// Push the currently selected local preset to the connected device.
+    fn action_send_to_device(&mut self) {
+        if self.operation_status != OperationStatus::Online {
+            self.set_status("Not connected — press d to select a device");
+            return;
+        }
+        if self.library.presets.is_empty() {
+            self.set_status("No preset selected");
+            return;
+        }
+
+        let entry = &mut self.library.presets[self.preset_selected];
+        // If local-only, assign it to slot 0 (first available); real
+        // implementation would send CC/SysEx and read the assigned slot back.
+        if entry.slot.is_none() {
+            entry.slot = Some(0);
+        }
+        entry.modified = Utc::now();
+        let _ = self.storage.save_library(&self.library);
+        self.set_status("Preset sent to device");
+    }
+
+    fn handle_conflict_key(&mut self, key: event::KeyEvent) {
+        if key.modifiers != KeyModifiers::NONE {
+            return;
+        }
+        match key.code {
+            // Override: replace the existing entry with the incoming one.
+            KeyCode::Char('o') | KeyCode::Char('O') => {
+                if let Some(conflict) = self.conflict.take() {
+                    self.library.presets[conflict.existing_idx] = conflict.incoming;
+                    let _ = self.storage.save_library(&self.library);
+                    self.set_status("Preset overridden");
+                }
+                self.active_overlay = None;
+            }
+            // No: discard the incoming preset, keep the existing one.
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                self.conflict = None;
+                self.active_overlay = None;
+                self.set_status("Pull cancelled");
+            }
+            // Rename: save the incoming as a new local-only entry with a timestamp suffix.
+            KeyCode::Char('r') | KeyCode::Char('R') => {
+                if let Some(mut conflict) = self.conflict.take() {
+                    let ts = conflict.incoming.modified.format("%Y%m%d-%H%M%S");
+                    conflict.incoming.name = format!("{} ({})", conflict.incoming.name, ts);
+                    conflict.incoming.slot = None; // local copy — not tied to a slot
+                    self.library.presets.push(conflict.incoming);
+                    let _ = self.storage.save_library(&self.library);
+                    self.set_status("Preset saved with timestamp");
+                }
+                self.active_overlay = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// Set a transient status message that disappears after ~3 seconds (30 ticks).
+    fn set_status(&mut self, msg: &str) {
+        self.status_message = Some((msg.to_owned(), self.tick + 30));
     }
 
     fn handle_liveboard_key(&mut self, key: event::KeyEvent) {
@@ -495,6 +644,7 @@ pub fn render(frame: &mut Frame, app: &App) {
             Overlay::DevicePicker => overlay_device::render(frame, frame.area(), app),
             Overlay::Looper => overlay_looper::render(frame, frame.area(), app),
             Overlay::Drum => overlay_drum::render(frame, frame.area(), app),
+            Overlay::Conflict => overlay_conflict::render(frame, frame.area(), app),
         }
     }
 }
@@ -540,15 +690,29 @@ fn render_tab_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 }
 
 fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    // Show transient message if still within its lifetime.
+    if let Some((msg, expires)) = &app.status_message
+        && app.tick < *expires
+    {
+        frame.render_widget(
+            Line::from(Span::styled(
+                format!(" {msg}"),
+                Style::default().fg(Color::Yellow),
+            )),
+            area,
+        );
+        return;
+    }
+
     let hints = if app.active_overlay.is_some() {
-        " Esc:close overlay"
+        " Esc:cancel"
     } else {
         match app.active_tab {
             Tab::Presets => {
                 if app.chain_panel_active {
                     " ←/→:slot  Tab:scene  Esc:back  q:quit"
                 } else {
-                    " j/k:move  Enter:chain  d:device  l:looper  D:drums  q:quit"
+                    " j/k:move  Enter:chain  g:get  s:send  d:device  l:looper  D:drums  q:quit"
                 }
             }
             Tab::LiveBoard => " ←/→:slot  Tab:scene  d:device  l:looper  D:drums  q:quit",

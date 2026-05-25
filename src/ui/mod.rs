@@ -7,6 +7,7 @@ pub mod action;
 pub mod key;
 
 mod app;
+mod overlay_conflict;
 mod overlay_device;
 mod overlay_drum;
 mod overlay_looper;

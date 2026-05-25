@@ -116,8 +116,10 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 * [x] 6.4 **Live Board tab**: full-screen 11-slot grid, one column per effect, active/inactive state, scene bar.
 * [x] 6.7 **About tab**: project info (name, version, repo) and full key-bindings reference table.
 * [x] 6.5 **Overlays**: device picker (`d`), looper (`l`), drum machine (`D`). Nerd Font status icon (󰣱/󰣲/spinner) in tab bar; icon legend in About tab.
-* [ ] 6.6 **Get/Send**: `g` pulls device preset to local copy; `s` pushes local preset to device slot.
-  - If a local copy already exists when pulling, show a 3-option popup: `[O]verride` / `[N]o` / `[R]ename with timestamp`.
+* [x] 6.6 **Get/Send**: `g` pulls device preset to local library; `s` pushes selected local preset to device slot.
+  - Conflict popup (`[O]verride` / `[N]o` / `[R]ename+timestamp`) when slot already exists in library.
+  - Transient status messages in status bar (auto-clears after ~3 s).
+  - MIDI data currently mocked; real SysEx/CC integration is Phase 7.
 * [ ] 6.8 **Mouse support**: click to select preset/effect/knob.
 
 ## Phase 7: Community & Extensibility
