@@ -86,7 +86,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 
 | Key | Action |
 |-----|--------|
-| `d` | device picker popup |
+| `d` | device picker popup (ONLY SHOWN if multiple supported devices) |
 | `g` | get device preset → local copy |
 | `s` | send local preset → device slot |
 | `e` | export preset to file |
@@ -117,7 +117,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 * [ ] 6.5 **Overlays**: device picker, looper, drum machine.
 * [ ] 6.6 **Get/Send**: `g` pulls device preset to local copy; `s` pushes local preset to device slot.
   - If a local copy already exists when pulling, show a 3-option popup: `[O]verride` / `[N]o` / `[R]ename with timestamp`.
-* [ ] 6.7 **About tab**: project info, repo, key bindings reference.
+* [ ] 6.7 **About popup**: project info, repo, key bindings reference (key `?`).
 * [ ] 6.8 **Mouse support**: click to select preset/effect/knob.
 
 ## Phase 7: Community & Extensibility
