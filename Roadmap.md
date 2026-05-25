@@ -35,12 +35,90 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 
 ## Phase 6: TUI (stateful)
 
-* [ ] **Persistence**: Local configuration to remember last used device and default folders.
-* [ ] **Input**: mouse support
-* [ ] **TUI Dashboard**: Interactive terminal interface for visual pedalboard management, effect toggling, and real-time knob adjustment.
-* [ ] **Tab Patches** (presets): array list with column `Name`, `Device`, Enabled effects icon or abbreviation. `s` to sort, `f` to filter, `/` to search on names. Bottom panel display effect with each knob value.
-* [ ] **Tab CC**: generic TUI to map MIDI CC (button and sliders)?
-* [ ] **Tab About**: display project info (name, version, repo) and key bindings.
+### Design Decisions
+
+**Layout**: single-pane preset list + bottom effect-chain panel + top tab bar.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ nux-audio  [Presets]  [Live Board]  [About]        MG-30 fw5.0.2 │
+├──────────────────────────────────────────────────────────────────┤
+│  Src  Slot  Name               Effects                           │
+│  📟   001   Crunch Lead        [AMP·DLY·REV]                     │
+│  📟   002   Clean Jazz         [COMP·AMP·REV]                    │
+│  📄    —    My Blues Driver    [WAH·AMP·MOD·DLY]                 │
+│  📟📄  003   Lead Boost *      [WAH·AMP·MOD·DLY]  ← local+device │
+├──────────────────────────────────────────────────────────────────┤
+│ Effect Chain: Clean Jazz  [Scene 1]  [Scene 2]  [Scene 3]        │
+│ [    ]──[COMP]──[    ]──[ AMP ]──[ EQ ]──[    ]──[    ]──[REV]  │
+│          Ratio:4         TubeCl   Low:40            Hall         │
+│          Thr:-10         Gain:30  Mid:50            Mix:35       │
+└──────────────────────────────────────────────────────────────────┘
+ d:device  g:get  s:send  e:export  /:search  ?:help
+```
+
+- `📟` = device only, `📄` = local only, `📟📄` = both exist
+- `*` + color on name = local has unsaved/unsynced changes
+- Green border on effect block = active, dim = bypassed
+
+**Editing**:
+- All editing is local-only. Device presets are pulled to a local copy first (`g`).
+- Editing a local preset sends CC messages live to the device (if connected) for immediate audio feedback.
+- Changes tracked with `*` indicator. `:w` / `S` persists to XDG local store.
+- In the bottom panel, `←`/`→` navigates effect slots; `Enter` expands to show all knobs.
+- Knob navigation: `j`/`k` between knobs, `+`/`-` or `←`/`→` to adjust, CC sent instantly.
+- `m` on a focused effect block opens a popup model picker for that slot.
+- `r` resets knob to default, `u` undoes last change, `Esc` collapses.
+
+**Scenes**: `Tab` cycles Scene 1 → 2 → 3 in the bottom panel (and sends scene-switch CC).
+
+**Tabs** (3 total):
+1. **[Presets]** — single-pane list + bottom effect chain panel
+2. **[Live Board]** — full-screen CC performance view, all effect slots and knobs visible
+3. **[About]** — version, repo URL, full key bindings reference
+
+**Overlays** (floating popups):
+- `d` → device picker (on startup if multiple devices found)
+- `l` → looper control (rec/play/stop/undo, BPM, vol)
+- `D` (uppercase) → drum machine (pattern list, BPM ±, vol, play/stop)
+
+**Key bindings**:
+
+| Key | Action |
+|-----|--------|
+| `d` | device picker popup |
+| `g` | get device preset → local copy |
+| `s` | send local preset → device slot |
+| `e` | export preset to file |
+| `/` | search/filter preset list |
+| `1`–`9` | jump to effect slot in bottom panel / live board |
+| `Shift+1`–`9` | toggle bypass for that slot |
+| `n` | noise gate slot |
+| `v` | volume slot |
+| `l` | looper overlay |
+| `D` | drum overlay |
+| `m` | model picker for focused effect |
+| `Tab` | cycle scenes (Scene 1/2/3) in bottom panel |
+| `r` | reset focused knob to default |
+| `u` | undo last knob change |
+| `F1`/`F2`/`F3` | switch top-level tabs |
+| `?` | help / key bindings |
+
+### Tasks
+
+* [ ] 6.1 **Persistence**: XDG local config and preset library stored as YAML via `serde-saphyr`.
+  - `~/.local/share/nux-audio/config.toml` — last device, preferences.
+  - `~/.local/share/nux-audio/presets/mg30.yaml` — one file per device model, all presets as a list.
+  - Each preset entry carries `slot: Option<u8>` (null = local-only), `firmware_gen`, `name`, `modified` timestamp, and per-effect knob values.
+  - `slot` drives the source icon: null → `📄`, set → `📟`, both copies exist → `📟📄`.
+* [ ] 6.2 **Preset list**: single-pane with `📟`/`📄`/`📟📄` source icons, slot, name, effect summary. `/` search, `*` dirty marker.
+* [ ] 6.3 **Bottom effect chain panel**: signal-chain visualization, inline knob editing, scene switcher with `Tab`.
+* [ ] 6.4 **Live Board tab**: full-screen effect grid with all knob values, real-time CC control.
+* [ ] 6.5 **Overlays**: device picker, looper, drum machine.
+* [ ] 6.6 **Get/Send**: `g` pulls device preset to local copy; `s` pushes local preset to device slot.
+  - If a local copy already exists when pulling, show a 3-option popup: `[O]verride` / `[N]o` / `[R]ename with timestamp`.
+* [ ] 6.7 **About tab**: project info, repo, key bindings reference.
+* [ ] 6.8 **Mouse support**: click to select preset/effect/knob.
 
 ## Phase 7: Community & Extensibility
 
