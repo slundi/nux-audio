@@ -14,10 +14,15 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const REPO: &str = env!("CARGO_PKG_REPOSITORY");
 
 pub fn render(frame: &mut Frame, area: Rect, _app: &App) {
-    let [info_area, keys_area] =
-        Layout::vertical([Constraint::Length(6), Constraint::Min(0)]).areas(area);
+    let [info_area, icons_area, keys_area] = Layout::vertical([
+        Constraint::Length(6),
+        Constraint::Length(5),
+        Constraint::Min(0),
+    ])
+    .areas(area);
 
     render_project_info(frame, info_area);
+    render_icon_legend(frame, icons_area);
     render_keybindings(frame, keys_area);
 }
 
@@ -53,6 +58,36 @@ fn render_project_info(frame: &mut Frame, area: Rect) {
             ),
         ]),
     ];
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn render_icon_legend(frame: &mut Frame, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Status Icons ")
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let icons: &[(&str, Color, &str)] = &[
+        ("󰣱", Color::Red, "Device offline / not connected"),
+        ("󰣲", Color::Green, "Device online / connected"),
+        ("⣾", Color::Yellow, "Operation in progress (spinner)"),
+    ];
+
+    let lines: Vec<Line> = icons
+        .iter()
+        .map(|(icon, color, label)| {
+            Line::from(vec![
+                Span::styled(
+                    format!("{icon}  "),
+                    Style::default().fg(*color).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(*label),
+            ])
+        })
+        .collect();
 
     frame.render_widget(Paragraph::new(lines), inner);
 }

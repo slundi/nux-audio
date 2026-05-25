@@ -115,7 +115,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 * [x] 6.3 **Bottom effect chain panel**: all 11 MG-30 slots visualized, active slots green, scene switcher with `Tab`, slot focus with `←`/`→`, `Enter` to focus/unfocus.
 * [x] 6.4 **Live Board tab**: full-screen 11-slot grid, one column per effect, active/inactive state, scene bar.
 * [x] 6.7 **About tab**: project info (name, version, repo) and full key-bindings reference table.
-* [ ] 6.5 **Overlays**: device picker, looper, drum machine.
+* [x] 6.5 **Overlays**: device picker (`d`), looper (`l`), drum machine (`D`). Nerd Font status icon (󰣱/󰣲/spinner) in tab bar; icon legend in About tab.
 * [ ] 6.6 **Get/Send**: `g` pulls device preset to local copy; `s` pushes local preset to device slot.
   - If a local copy already exists when pulling, show a 3-option popup: `[O]verride` / `[N]o` / `[R]ename with timestamp`.
 * [ ] 6.8 **Mouse support**: click to select preset/effect/knob.

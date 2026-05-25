@@ -19,7 +19,16 @@ use ratatui::{
 
 use crate::storage::{Config, PresetLibrary, Storage};
 
-use super::{tab_about, tab_liveboard, tab_presets};
+use super::{overlay_device, overlay_drum, overlay_looper, tab_about, tab_liveboard, tab_presets};
+
+// ── Status icons (Nerd Fonts) ─────────────────────────────────────────────────
+
+/// Device offline / disconnected.
+pub const ICON_OFFLINE: &str = "󰣱";
+/// Device connected and idle.
+pub const ICON_ONLINE: &str = "󰣲";
+/// Braille spinner frames shown when an operation is in progress.
+pub const SPINNER_FRAMES: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
 
@@ -31,11 +40,98 @@ pub enum Tab {
     About = 2,
 }
 
-// ── DeviceInfo ────────────────────────────────────────────────────────────────
+// ── Overlay ───────────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Overlay {
+    DevicePicker,
+    Looper,
+    Drum,
+}
+
+// ── Operation status ──────────────────────────────────────────────────────────
+
+#[derive(Clone, Default, PartialEq, Eq)]
+pub enum OperationStatus {
+    #[default]
+    Offline,
+    Online,
+    /// A MIDI operation is in progress. `label` describes it (e.g. "Fetching presets…").
+    #[allow(dead_code)]
+    Busy {
+        label: String,
+    },
+}
+
+// ── Device info ───────────────────────────────────────────────────────────────
 
 pub struct DeviceInfo {
     pub model: String,
     pub fw_version: String,
+}
+
+// ── Looper state ──────────────────────────────────────────────────────────────
+
+#[derive(Default)]
+pub struct LooperState {
+    pub is_recording: bool,
+    pub is_playing: bool,
+    /// Tempo in BPM (20–240).
+    pub bpm: u16,
+    /// Output volume (0–127).
+    pub volume: u8,
+}
+
+impl LooperState {
+    fn new() -> Self {
+        Self {
+            bpm: 120,
+            volume: 80,
+            ..Default::default()
+        }
+    }
+}
+
+// ── Drum machine state ────────────────────────────────────────────────────────
+
+pub const DRUM_PATTERNS: &[&str] = &[
+    "Rock 1",
+    "Rock 2",
+    "Blues Shuffle",
+    "Latin",
+    "Pop 1",
+    "Pop 2",
+    "Jazz",
+    "Funk",
+];
+
+pub struct DrumState {
+    pub pattern_index: usize,
+    /// Tempo in BPM (20–240).
+    pub bpm: u16,
+    /// Output volume (0–127).
+    pub volume: u8,
+    pub is_playing: bool,
+}
+
+impl Default for DrumState {
+    fn default() -> Self {
+        Self {
+            pattern_index: 0,
+            bpm: 120,
+            volume: 80,
+            is_playing: false,
+        }
+    }
+}
+
+// ── Device picker state ───────────────────────────────────────────────────────
+
+#[derive(Default)]
+pub struct DevicePickerState {
+    pub selected: usize,
+    /// Model names of detected MIDI devices.
+    pub devices: Vec<String>,
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -44,6 +140,10 @@ pub struct DeviceInfo {
 pub struct App {
     pub should_quit: bool,
     pub active_tab: Tab,
+    /// Overlay shown on top of the current tab, if any.
+    pub active_overlay: Option<Overlay>,
+    /// Current device / operation status, drives the tab-bar icon.
+    pub operation_status: OperationStatus,
     /// Row index selected in the preset list.
     pub preset_selected: usize,
     /// Active scene index: 0 = A, 1 = B, 2 = C.
@@ -54,8 +154,13 @@ pub struct App {
     pub chain_panel_active: bool,
     /// Connected device info, `None` when offline.
     pub device_info: Option<DeviceInfo>,
+    pub looper: LooperState,
+    pub drum: DrumState,
+    pub device_picker: DevicePickerState,
     /// Preset library loaded from XDG local storage.
     pub library: PresetLibrary,
+    /// Monotonically increasing tick counter — used for spinner animation.
+    pub tick: u64,
     #[allow(dead_code)] // used in future phases for preferences/save
     pub config: Config,
     #[allow(dead_code)] // used in future phases for save/load operations
@@ -73,12 +178,18 @@ impl App {
         Self {
             should_quit: false,
             active_tab: Tab::default(),
+            active_overlay: None,
+            operation_status: OperationStatus::default(),
             preset_selected: 0,
             active_scene: 0,
             chain_slot_focus: 0,
             chain_panel_active: false,
             device_info: None,
+            looper: LooperState::new(),
+            drum: DrumState::default(),
+            device_picker: DevicePickerState::default(),
             library,
+            tick: 0,
             config,
             storage,
         }
@@ -96,9 +207,28 @@ impl App {
         self.library.presets.len()
     }
 
+    /// Open an overlay, running any setup needed (e.g. device scan for picker).
+    pub fn open_overlay(&mut self, overlay: Overlay) {
+        if overlay == Overlay::DevicePicker {
+            let devices = crate::device::Device::detect();
+            self.device_picker = DevicePickerState {
+                selected: 0,
+                devices: devices.into_iter().map(|d| d.model).collect(),
+            };
+        }
+        self.active_overlay = Some(overlay);
+    }
+
     // ── Key handling ──────────────────────────────────────────────────────────
 
     pub fn handle_key(&mut self, key: event::KeyEvent) {
+        // Overlay absorbs all keys when active.
+        if let Some(overlay) = self.active_overlay {
+            self.handle_overlay_key(overlay, key);
+            return;
+        }
+
+        // Global bindings (no modifiers).
         if key.modifiers == KeyModifiers::NONE {
             match key.code {
                 KeyCode::Char('q') => {
@@ -117,14 +247,135 @@ impl App {
                     self.active_tab = Tab::About;
                     return;
                 }
+                KeyCode::Char('d') => {
+                    self.open_overlay(Overlay::DevicePicker);
+                    return;
+                }
+                KeyCode::Char('l') => {
+                    self.open_overlay(Overlay::Looper);
+                    return;
+                }
                 _ => {}
             }
+            // 'D' is Shift+d — check separately.
+        }
+        if key.modifiers == KeyModifiers::SHIFT && key.code == KeyCode::Char('D') {
+            self.open_overlay(Overlay::Drum);
+            return;
         }
 
         match self.active_tab {
             Tab::Presets => self.handle_presets_key(key),
             Tab::LiveBoard => self.handle_liveboard_key(key),
             Tab::About => {}
+        }
+    }
+
+    fn handle_overlay_key(&mut self, overlay: Overlay, key: event::KeyEvent) {
+        // Esc always closes.
+        if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Esc {
+            self.active_overlay = None;
+            return;
+        }
+        match overlay {
+            Overlay::DevicePicker => self.handle_device_picker_key(key),
+            Overlay::Looper => self.handle_looper_key(key),
+            Overlay::Drum => self.handle_drum_key(key),
+        }
+    }
+
+    fn handle_device_picker_key(&mut self, key: event::KeyEvent) {
+        if key.modifiers != KeyModifiers::NONE {
+            return;
+        }
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.device_picker.selected = self.device_picker.selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let max = self.device_picker.devices.len().saturating_sub(1);
+                self.device_picker.selected = (self.device_picker.selected + 1).min(max);
+            }
+            KeyCode::Enter => {
+                if let Some(model) = self
+                    .device_picker
+                    .devices
+                    .get(self.device_picker.selected)
+                    .cloned()
+                {
+                    self.device_info = Some(DeviceInfo {
+                        model: model.clone(),
+                        fw_version: "?.?.?".into(),
+                    });
+                    self.operation_status = OperationStatus::Online;
+                    self.library = self.storage.load_library(&model);
+                    self.preset_selected = 0;
+                    self.active_overlay = None;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_looper_key(&mut self, key: event::KeyEvent) {
+        if key.modifiers != KeyModifiers::NONE {
+            return;
+        }
+        match key.code {
+            KeyCode::Char('r') => {
+                self.looper.is_recording = !self.looper.is_recording;
+                if self.looper.is_recording {
+                    self.looper.is_playing = false;
+                }
+            }
+            KeyCode::Char(' ') => {
+                self.looper.is_playing = !self.looper.is_playing;
+                if self.looper.is_playing {
+                    self.looper.is_recording = false;
+                }
+            }
+            KeyCode::Char('c') => {
+                self.looper.is_playing = false;
+                self.looper.is_recording = false;
+            }
+            KeyCode::Right | KeyCode::Char('+') => {
+                self.looper.bpm = (self.looper.bpm + 1).min(240);
+            }
+            KeyCode::Left | KeyCode::Char('-') => {
+                self.looper.bpm = self.looper.bpm.saturating_sub(1).max(20);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.looper.volume = (self.looper.volume + 1).min(127);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.looper.volume = self.looper.volume.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_drum_key(&mut self, key: event::KeyEvent) {
+        if key.modifiers != KeyModifiers::NONE {
+            return;
+        }
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.drum.pattern_index = self.drum.pattern_index.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.drum.pattern_index =
+                    (self.drum.pattern_index + 1).min(DRUM_PATTERNS.len() - 1);
+            }
+            KeyCode::Right | KeyCode::Char('+') => {
+                self.drum.bpm = (self.drum.bpm + 1).min(240);
+            }
+            KeyCode::Left | KeyCode::Char('-') => {
+                self.drum.bpm = self.drum.bpm.saturating_sub(1).max(20);
+            }
+            KeyCode::Char(' ') => {
+                self.drum.is_playing = !self.drum.is_playing;
+            }
+            _ => {}
         }
     }
 
@@ -211,6 +462,7 @@ fn run_event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::
         {
             app.handle_key(key);
         }
+        app.tick = app.tick.wrapping_add(1);
         if app.should_quit {
             return Ok(());
         }
@@ -236,16 +488,35 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 
     render_status_bar(frame, status_row, app);
+
+    // Overlays rendered last so they appear on top.
+    if let Some(overlay) = app.active_overlay {
+        match overlay {
+            Overlay::DevicePicker => overlay_device::render(frame, frame.area(), app),
+            Overlay::Looper => overlay_looper::render(frame, frame.area(), app),
+            Overlay::Drum => overlay_drum::render(frame, frame.area(), app),
+        }
+    }
 }
 
 fn render_tab_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    // Status icon left of device label.
+    let (icon, icon_color) = match &app.operation_status {
+        OperationStatus::Offline => (ICON_OFFLINE, Color::Red),
+        OperationStatus::Online => (ICON_ONLINE, Color::Green),
+        OperationStatus::Busy { .. } => (
+            SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()],
+            Color::Yellow,
+        ),
+    };
     let device_label = match &app.device_info {
         Some(info) => format!(" {} fw{}", info.model, info.fw_version),
         None => " offline".to_owned(),
     };
+    // Width: icon(1) + space(1) + label.
+    let right_width = 2 + device_label.len() as u16;
+    let tab_width = area.width.saturating_sub(right_width);
 
-    // Split: tabs on left, device info on right.
-    let tab_width = area.width.saturating_sub(device_label.len() as u16 + 2);
     let [tabs_area, info_area] =
         Layout::horizontal([Constraint::Length(tab_width), Constraint::Min(0)]).areas(area);
 
@@ -260,26 +531,32 @@ fn render_tab_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .divider(Span::raw(" "));
     frame.render_widget(tabs, tabs_area);
 
-    let info = Line::from(vec![Span::styled(
-        device_label,
-        Style::default().fg(Color::Cyan),
-    )])
+    let info = Line::from(vec![
+        Span::styled(icon, Style::default().fg(icon_color)),
+        Span::styled(device_label, Style::default().fg(Color::Cyan)),
+    ])
     .right_aligned();
     frame.render_widget(info, info_area);
 }
 
 fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let hints = match app.active_tab {
-        Tab::Presets => {
-            if app.chain_panel_active {
-                " ←/→:slot  Tab:scene  Esc:back  q:quit"
-            } else {
-                " j/k:move  Enter:chain  d:device  g:get  s:send  /:search  q:quit"
+    let hints = if app.active_overlay.is_some() {
+        " Esc:close overlay"
+    } else {
+        match app.active_tab {
+            Tab::Presets => {
+                if app.chain_panel_active {
+                    " ←/→:slot  Tab:scene  Esc:back  q:quit"
+                } else {
+                    " j/k:move  Enter:chain  d:device  l:looper  D:drums  q:quit"
+                }
             }
+            Tab::LiveBoard => " ←/→:slot  Tab:scene  d:device  l:looper  D:drums  q:quit",
+            Tab::About => " q:quit",
         }
-        Tab::LiveBoard => " j/k:slot  Tab:scene  q:quit",
-        Tab::About => " q:quit",
     };
-    let bar = Line::from(Span::styled(hints, Style::default().fg(Color::DarkGray)));
-    frame.render_widget(bar, area);
+    frame.render_widget(
+        Line::from(Span::styled(hints, Style::default().fg(Color::DarkGray))),
+        area,
+    );
 }

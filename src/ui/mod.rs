@@ -7,6 +7,9 @@ pub mod action;
 pub mod key;
 
 mod app;
+mod overlay_device;
+mod overlay_drum;
+mod overlay_looper;
 mod tab_about;
 mod tab_liveboard;
 mod tab_presets;
