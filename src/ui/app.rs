@@ -1,158 +1,27 @@
-//! Application state, event loop, and top-level render dispatch.
+//! Application state struct, key-event handlers, actions, and event loop.
+//!
+//! Types are defined in [`super::state`].
+//! Mouse handlers live in [`super::mouse`].
+//! Render functions live in [`super::render`].
 
 use std::io;
 use std::time::Duration;
 
 use chrono::Utc;
 use crossterm::{
-    event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseButton,
-        MouseEventKind,
-    },
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{
-    Frame, Terminal,
-    backend::CrosstermBackend,
-    layout::{Constraint, Layout, Position, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::Tabs,
-};
+use ratatui::{Terminal, backend::CrosstermBackend, layout::Rect};
 
 use crate::storage::{Config, LibraryEntry, PresetLibrary, Storage};
 
-use super::{
-    overlay_conflict, overlay_device, overlay_drum, overlay_looper, tab_about, tab_liveboard,
-    tab_presets,
+use super::render::render;
+use super::state::{
+    ConflictState, DRUM_PATTERNS, DeviceInfo, DevicePickerState, DrumState, LooperState,
+    OperationStatus, Overlay, Tab,
 };
-
-// ── Status icons (Nerd Fonts) ─────────────────────────────────────────────────
-
-/// Device offline / disconnected.
-pub const ICON_OFFLINE: &str = "󰣱";
-/// Device connected and idle.
-pub const ICON_ONLINE: &str = "󰣲";
-/// Braille spinner frames shown when an operation is in progress.
-pub const SPINNER_FRAMES: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
-
-// ── Tab ───────────────────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
-pub enum Tab {
-    #[default]
-    Presets = 0,
-    LiveBoard = 1,
-    About = 2,
-}
-
-// ── Overlay ───────────────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Overlay {
-    DevicePicker,
-    Looper,
-    Drum,
-    Conflict,
-}
-
-// ── Conflict state ────────────────────────────────────────────────────────────
-
-/// State carried while the conflict overlay is visible.
-pub struct ConflictState {
-    /// The preset fetched from the device that would replace `existing`.
-    pub incoming: LibraryEntry,
-    /// The existing library entry that occupies the same slot.
-    pub existing: LibraryEntry,
-    /// Index of the existing entry in `library.presets`.
-    pub existing_idx: usize,
-}
-
-// ── Operation status ──────────────────────────────────────────────────────────
-
-#[derive(Clone, Default, PartialEq, Eq)]
-pub enum OperationStatus {
-    #[default]
-    Offline,
-    Online,
-    /// A MIDI operation is in progress. `label` describes it (e.g. "Fetching presets…").
-    #[allow(dead_code)]
-    Busy {
-        label: String,
-    },
-}
-
-// ── Device info ───────────────────────────────────────────────────────────────
-
-pub struct DeviceInfo {
-    pub model: String,
-    pub fw_version: String,
-}
-
-// ── Looper state ──────────────────────────────────────────────────────────────
-
-#[derive(Default)]
-pub struct LooperState {
-    pub is_recording: bool,
-    pub is_playing: bool,
-    /// Tempo in BPM (20–240).
-    pub bpm: u16,
-    /// Output volume (0–127).
-    pub volume: u8,
-}
-
-impl LooperState {
-    fn new() -> Self {
-        Self {
-            bpm: 120,
-            volume: 80,
-            ..Default::default()
-        }
-    }
-}
-
-// ── Drum machine state ────────────────────────────────────────────────────────
-
-pub const DRUM_PATTERNS: &[&str] = &[
-    "Rock 1",
-    "Rock 2",
-    "Blues Shuffle",
-    "Latin",
-    "Pop 1",
-    "Pop 2",
-    "Jazz",
-    "Funk",
-];
-
-pub struct DrumState {
-    pub pattern_index: usize,
-    /// Tempo in BPM (20–240).
-    pub bpm: u16,
-    /// Output volume (0–127).
-    pub volume: u8,
-    pub is_playing: bool,
-}
-
-impl Default for DrumState {
-    fn default() -> Self {
-        Self {
-            pattern_index: 0,
-            bpm: 120,
-            volume: 80,
-            is_playing: false,
-        }
-    }
-}
-
-// ── Device picker state ───────────────────────────────────────────────────────
-
-#[derive(Default)]
-pub struct DevicePickerState {
-    pub selected: usize,
-    /// Model names of detected MIDI devices.
-    pub devices: Vec<String>,
-}
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -188,7 +57,8 @@ pub struct App {
     pub status_message: Option<(String, u64)>,
     #[allow(dead_code)] // used in future phases for preferences/save
     pub config: Config,
-    storage: Storage,
+    /// `pub(crate)` so that the mouse handler module can call `save_library`.
+    pub(crate) storage: Storage,
 }
 
 impl App {
@@ -443,6 +313,62 @@ impl App {
         }
     }
 
+    fn handle_liveboard_key(&mut self, key: event::KeyEvent) {
+        if key.modifiers != KeyModifiers::NONE {
+            return;
+        }
+        match key.code {
+            KeyCode::Tab => {
+                self.active_scene = (self.active_scene + 1) % 3;
+            }
+            KeyCode::Left | KeyCode::Char('h') => {
+                self.chain_slot_focus = self.chain_slot_focus.saturating_sub(1);
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                self.chain_slot_focus = (self.chain_slot_focus + 1).min(10);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_conflict_key(&mut self, key: event::KeyEvent) {
+        if key.modifiers != KeyModifiers::NONE {
+            return;
+        }
+        match key.code {
+            // Override: replace the existing entry with the incoming one.
+            KeyCode::Char('o') | KeyCode::Char('O') => {
+                if let Some(conflict) = self.conflict.take() {
+                    self.library.presets[conflict.existing_idx] = conflict.incoming;
+                    let _ = self.storage.save_library(&self.library);
+                    self.set_status("Preset overridden");
+                }
+                self.active_overlay = None;
+            }
+            // No: discard the incoming preset, keep the existing one.
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                self.conflict = None;
+                self.active_overlay = None;
+                self.set_status("Pull cancelled");
+            }
+            // Rename: save the incoming as a new local-only entry with a timestamp suffix.
+            KeyCode::Char('r') | KeyCode::Char('R') => {
+                if let Some(mut conflict) = self.conflict.take() {
+                    let ts = conflict.incoming.modified.format("%Y%m%d-%H%M%S");
+                    conflict.incoming.name = format!("{} ({})", conflict.incoming.name, ts);
+                    conflict.incoming.slot = None; // local copy — not tied to a slot
+                    self.library.presets.push(conflict.incoming);
+                    let _ = self.storage.save_library(&self.library);
+                    self.set_status("Preset saved with timestamp");
+                }
+                self.active_overlay = None;
+            }
+            _ => {}
+        }
+    }
+
+    // ── Device actions ────────────────────────────────────────────────────────
+
     /// Pull the current preset from the connected device into the local library.
     ///
     /// If a local entry already exists for the same device slot, the conflict
@@ -521,318 +447,10 @@ impl App {
         self.set_status("Preset sent to device");
     }
 
-    fn handle_conflict_key(&mut self, key: event::KeyEvent) {
-        if key.modifiers != KeyModifiers::NONE {
-            return;
-        }
-        match key.code {
-            // Override: replace the existing entry with the incoming one.
-            KeyCode::Char('o') | KeyCode::Char('O') => {
-                if let Some(conflict) = self.conflict.take() {
-                    self.library.presets[conflict.existing_idx] = conflict.incoming;
-                    let _ = self.storage.save_library(&self.library);
-                    self.set_status("Preset overridden");
-                }
-                self.active_overlay = None;
-            }
-            // No: discard the incoming preset, keep the existing one.
-            KeyCode::Char('n') | KeyCode::Char('N') => {
-                self.conflict = None;
-                self.active_overlay = None;
-                self.set_status("Pull cancelled");
-            }
-            // Rename: save the incoming as a new local-only entry with a timestamp suffix.
-            KeyCode::Char('r') | KeyCode::Char('R') => {
-                if let Some(mut conflict) = self.conflict.take() {
-                    let ts = conflict.incoming.modified.format("%Y%m%d-%H%M%S");
-                    conflict.incoming.name = format!("{} ({})", conflict.incoming.name, ts);
-                    conflict.incoming.slot = None; // local copy — not tied to a slot
-                    self.library.presets.push(conflict.incoming);
-                    let _ = self.storage.save_library(&self.library);
-                    self.set_status("Preset saved with timestamp");
-                }
-                self.active_overlay = None;
-            }
-            _ => {}
-        }
-    }
-
     /// Set a transient status message that disappears after ~3 seconds (30 ticks).
-    fn set_status(&mut self, msg: &str) {
+    pub(super) fn set_status(&mut self, msg: &str) {
         self.status_message = Some((msg.to_owned(), self.tick + 30));
     }
-
-    // ── Mouse handling ────────────────────────────────────────────────────────
-
-    pub fn handle_mouse(&mut self, mouse: event::MouseEvent, frame_area: Rect) {
-        let col = mouse.column;
-        let row = mouse.row;
-        let pos = Position { x: col, y: row };
-
-        // Recompute the same top-level layout used in render().
-        let [tab_row, content, _status] = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-        .areas(frame_area);
-
-        // Overlays absorb all mouse events.
-        if let Some(overlay) = self.active_overlay {
-            match mouse.kind {
-                MouseEventKind::Down(MouseButton::Left) => {
-                    self.handle_mouse_overlay_click(overlay, col, row, frame_area);
-                }
-                MouseEventKind::ScrollUp => self.handle_mouse_overlay_scroll(overlay, -1),
-                MouseEventKind::ScrollDown => self.handle_mouse_overlay_scroll(overlay, 1),
-                _ => {}
-            }
-            return;
-        }
-
-        match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left) => {
-                if tab_row.contains(pos) {
-                    self.handle_mouse_tab_click(col, tab_row);
-                } else if content.contains(pos) {
-                    self.handle_mouse_content_click(col, row, content);
-                }
-            }
-            MouseEventKind::ScrollUp if content.contains(pos) => {
-                self.handle_mouse_content_scroll(-1);
-            }
-            MouseEventKind::ScrollDown if content.contains(pos) => {
-                self.handle_mouse_content_scroll(1);
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_mouse_tab_click(&mut self, col: u16, tab_row: Rect) {
-        // Mirror the right_width computation in render_tab_bar.
-        let device_label_len = match &self.device_info {
-            Some(info) => format!(" {} fw{}", info.model, info.fw_version).len(),
-            None => " offline".len(),
-        };
-        let right_width = (2 + device_label_len) as u16;
-        let tabs_width = tab_row.width.saturating_sub(right_width);
-
-        if col < tab_row.x || col >= tab_row.x + tabs_width {
-            return; // clicked the info area on the right
-        }
-        let offset = col - tab_row.x;
-
-        // Tabs: "[F1] Presets"(12) + " "(1) + "[F2] Live Board"(15) + " "(1) + "[F3] About"(10)
-        if offset < 13 {
-            self.active_tab = Tab::Presets;
-        } else if offset < 29 {
-            self.active_tab = Tab::LiveBoard;
-        } else {
-            self.active_tab = Tab::About;
-        }
-    }
-
-    fn handle_mouse_content_click(&mut self, col: u16, row: u16, content: Rect) {
-        let pos = Position { x: col, y: row };
-        match self.active_tab {
-            Tab::Presets => {
-                let [list_area, chain_area] =
-                    Layout::vertical([Constraint::Percentage(65), Constraint::Percentage(35)])
-                        .areas(content);
-
-                if list_area.contains(pos) {
-                    self.handle_mouse_preset_list_click(row, list_area);
-                } else if chain_area.contains(pos) {
-                    self.handle_mouse_chain_click(col, chain_area);
-                }
-            }
-            Tab::LiveBoard => {
-                let [scene_bar, grid_area] =
-                    Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(content);
-
-                if scene_bar.contains(pos) {
-                    // Click scene bar → cycle scene.
-                    self.active_scene = (self.active_scene + 1) % 3;
-                } else if grid_area.contains(pos) && grid_area.width > 0 {
-                    // Click a slot column in the live board grid.
-                    let slot_idx = ((col - grid_area.x) as usize * 11) / grid_area.width as usize;
-                    self.chain_slot_focus = slot_idx.min(10);
-                }
-            }
-            Tab::About => {}
-        }
-    }
-
-    fn handle_mouse_content_scroll(&mut self, delta: i32) {
-        if self.active_tab == Tab::Presets && !self.chain_panel_active {
-            if delta < 0 {
-                self.preset_selected = self.preset_selected.saturating_sub(1);
-            } else {
-                let max = self.preset_count().saturating_sub(1);
-                self.preset_selected = (self.preset_selected + 1).min(max);
-            }
-        }
-    }
-
-    fn handle_mouse_preset_list_click(&mut self, row: u16, list_area: Rect) {
-        // Inner area starts after the top border (y+1) and the header row (+1 more).
-        let first_data_y = list_area.y + 2;
-        if row < first_data_y {
-            return;
-        }
-        let clicked_idx = (row - first_data_y) as usize;
-        if clicked_idx < self.library.presets.len() {
-            self.preset_selected = clicked_idx;
-            self.chain_panel_active = false;
-        }
-    }
-
-    fn handle_mouse_chain_click(&mut self, col: u16, chain_area: Rect) {
-        // Inner x starts after the left border.
-        let inner_x = chain_area.x + 1;
-        if col < inner_x {
-            return;
-        }
-        // Chain line layout: [WAH]──[CMP]──... Each slot occupies 7 chars.
-        // Slot n starts at inner_x + n*7.
-        let slot_idx = ((col - inner_x) / 7) as usize;
-        if slot_idx <= 10 {
-            self.chain_slot_focus = slot_idx;
-            self.chain_panel_active = true;
-        }
-    }
-
-    fn handle_mouse_overlay_click(
-        &mut self,
-        overlay: Overlay,
-        col: u16,
-        row: u16,
-        frame_area: Rect,
-    ) {
-        match overlay {
-            Overlay::DevicePicker => {
-                // overlay_device: WIDTH=44, HEIGHT=12; items start at popup.y+2 (border+blank).
-                let popup = popup_rect(44, 12, frame_area);
-                let first_item_y = popup.y + 2;
-                let last_y = popup.y + popup.height - 1;
-                if row < first_item_y || row >= last_y {
-                    return;
-                }
-                let clicked = (row - first_item_y) as usize;
-                if clicked < self.device_picker.devices.len() {
-                    self.device_picker.selected = clicked;
-                }
-            }
-            Overlay::Drum => {
-                // overlay_drum: WIDTH=44, HEIGHT=16; VISIBLE=6 pattern rows from popup.y+1.
-                let popup = popup_rect(44, 16, frame_area);
-                let first_item_y = popup.y + 1;
-                let visible = 6usize;
-                if row < first_item_y || row >= first_item_y + visible as u16 {
-                    return;
-                }
-                let clicked = (row - first_item_y) as usize;
-                let start = self
-                    .drum
-                    .pattern_index
-                    .saturating_sub(visible / 2)
-                    .min(DRUM_PATTERNS.len().saturating_sub(visible));
-                let item = start + clicked;
-                if item < DRUM_PATTERNS.len() {
-                    self.drum.pattern_index = item;
-                }
-            }
-            Overlay::Conflict => {
-                // Bottom border row contains [O]verride / [N]o / [R]ename+timestamp.
-                // Divide the popup width into three equal click zones.
-                let popup = popup_rect(52, 12, frame_area);
-                if row == popup.y + popup.height - 1 {
-                    let third = popup.width / 3;
-                    if col < popup.x + third {
-                        if let Some(conflict) = self.conflict.take() {
-                            self.library.presets[conflict.existing_idx] = conflict.incoming;
-                            let _ = self.storage.save_library(&self.library);
-                            self.set_status("Preset overridden");
-                        }
-                        self.active_overlay = None;
-                    } else if col < popup.x + 2 * third {
-                        self.conflict = None;
-                        self.active_overlay = None;
-                        self.set_status("Pull cancelled");
-                    } else {
-                        if let Some(mut conflict) = self.conflict.take() {
-                            let ts = conflict.incoming.modified.format("%Y%m%d-%H%M%S");
-                            conflict.incoming.name = format!("{} ({})", conflict.incoming.name, ts);
-                            conflict.incoming.slot = None;
-                            self.library.presets.push(conflict.incoming);
-                            let _ = self.storage.save_library(&self.library);
-                            self.set_status("Preset saved with timestamp");
-                        }
-                        self.active_overlay = None;
-                    }
-                }
-            }
-            Overlay::Looper => {} // Transport buttons: keyboard preferred.
-        }
-    }
-
-    fn handle_mouse_overlay_scroll(&mut self, overlay: Overlay, delta: i32) {
-        match overlay {
-            Overlay::DevicePicker => {
-                if delta < 0 {
-                    self.device_picker.selected = self.device_picker.selected.saturating_sub(1);
-                } else {
-                    let max = self.device_picker.devices.len().saturating_sub(1);
-                    self.device_picker.selected = (self.device_picker.selected + 1).min(max);
-                }
-            }
-            Overlay::Drum => {
-                if delta < 0 {
-                    self.drum.pattern_index = self.drum.pattern_index.saturating_sub(1);
-                } else {
-                    self.drum.pattern_index =
-                        (self.drum.pattern_index + 1).min(DRUM_PATTERNS.len() - 1);
-                }
-            }
-            Overlay::Looper => {
-                // Scroll adjusts volume in the looper overlay.
-                if delta < 0 {
-                    self.looper.volume = (self.looper.volume + 1).min(127);
-                } else {
-                    self.looper.volume = self.looper.volume.saturating_sub(1);
-                }
-            }
-            Overlay::Conflict => {}
-        }
-    }
-
-    fn handle_liveboard_key(&mut self, key: event::KeyEvent) {
-        if key.modifiers != KeyModifiers::NONE {
-            return;
-        }
-        match key.code {
-            KeyCode::Tab => {
-                self.active_scene = (self.active_scene + 1) % 3;
-            }
-            KeyCode::Left | KeyCode::Char('h') => {
-                self.chain_slot_focus = self.chain_slot_focus.saturating_sub(1);
-            }
-            KeyCode::Right | KeyCode::Char('l') => {
-                self.chain_slot_focus = (self.chain_slot_focus + 1).min(10);
-            }
-            _ => {}
-        }
-    }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Return the centered popup rect used by overlay renderers.
-/// Mirrors the `centered_rect` helper in each overlay file.
-fn popup_rect(width: u16, height: u16, area: Rect) -> Rect {
-    let x = area.x + area.width.saturating_sub(width) / 2;
-    let y = area.y + area.height.saturating_sub(height) / 2;
-    Rect::new(x, y, width.min(area.width), height.min(area.height))
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -879,111 +497,4 @@ fn run_event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::
             return Ok(());
         }
     }
-}
-
-// ── Top-level render ──────────────────────────────────────────────────────────
-
-pub fn render(frame: &mut Frame, app: &App) {
-    let [tab_row, content, status_row] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(0),
-        Constraint::Length(1),
-    ])
-    .areas(frame.area());
-
-    render_tab_bar(frame, tab_row, app);
-
-    match app.active_tab {
-        Tab::Presets => tab_presets::render(frame, content, app),
-        Tab::LiveBoard => tab_liveboard::render(frame, content, app),
-        Tab::About => tab_about::render(frame, content, app),
-    }
-
-    render_status_bar(frame, status_row, app);
-
-    // Overlays rendered last so they appear on top.
-    if let Some(overlay) = app.active_overlay {
-        match overlay {
-            Overlay::DevicePicker => overlay_device::render(frame, frame.area(), app),
-            Overlay::Looper => overlay_looper::render(frame, frame.area(), app),
-            Overlay::Drum => overlay_drum::render(frame, frame.area(), app),
-            Overlay::Conflict => overlay_conflict::render(frame, frame.area(), app),
-        }
-    }
-}
-
-fn render_tab_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    // Status icon left of device label.
-    let (icon, icon_color) = match &app.operation_status {
-        OperationStatus::Offline => (ICON_OFFLINE, Color::Red),
-        OperationStatus::Online => (ICON_ONLINE, Color::Green),
-        OperationStatus::Busy { .. } => (
-            SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()],
-            Color::Yellow,
-        ),
-    };
-    let device_label = match &app.device_info {
-        Some(info) => format!(" {} fw{}", info.model, info.fw_version),
-        None => " offline".to_owned(),
-    };
-    // Width: icon(1) + space(1) + label.
-    let right_width = 2 + device_label.len() as u16;
-    let tab_width = area.width.saturating_sub(right_width);
-
-    let [tabs_area, info_area] =
-        Layout::horizontal([Constraint::Length(tab_width), Constraint::Min(0)]).areas(area);
-
-    let tabs = Tabs::new(vec!["[F1] Presets", "[F2] Live Board", "[F3] About"])
-        .select(app.active_tab as usize)
-        .style(Style::default().fg(Color::DarkGray))
-        .highlight_style(
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )
-        .divider(Span::raw(" "));
-    frame.render_widget(tabs, tabs_area);
-
-    let info = Line::from(vec![
-        Span::styled(icon, Style::default().fg(icon_color)),
-        Span::styled(device_label, Style::default().fg(Color::Cyan)),
-    ])
-    .right_aligned();
-    frame.render_widget(info, info_area);
-}
-
-fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    // Show transient message if still within its lifetime.
-    if let Some((msg, expires)) = &app.status_message
-        && app.tick < *expires
-    {
-        frame.render_widget(
-            Line::from(Span::styled(
-                format!(" {msg}"),
-                Style::default().fg(Color::Yellow),
-            )),
-            area,
-        );
-        return;
-    }
-
-    let hints = if app.active_overlay.is_some() {
-        " Esc:cancel"
-    } else {
-        match app.active_tab {
-            Tab::Presets => {
-                if app.chain_panel_active {
-                    " ←/→:slot  Tab:scene  Esc:back  q:quit"
-                } else {
-                    " j/k:move  Enter:chain  g:get  s:send  d:device  l:looper  D:drums  q:quit"
-                }
-            }
-            Tab::LiveBoard => " ←/→:slot  Tab:scene  d:device  l:looper  D:drums  q:quit",
-            Tab::About => " q:quit",
-        }
-    };
-    frame.render_widget(
-        Line::from(Span::styled(hints, Style::default().fg(Color::DarkGray))),
-        area,
-    );
 }

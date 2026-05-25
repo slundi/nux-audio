@@ -22,7 +22,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-use super::app::{App, DRUM_PATTERNS};
+use super::app::App;
+use super::state::DRUM_PATTERNS;
 
 const WIDTH: u16 = 44;
 const HEIGHT: u16 = 16;
