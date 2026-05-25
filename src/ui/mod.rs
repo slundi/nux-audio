@@ -1,0 +1,14 @@
+//! TUI module: application state, event loop, and tab renderers.
+//!
+//! Entry point: [`run_tui`]. Call it from a blocking context to start the
+//! interactive terminal UI.
+
+pub mod action;
+pub mod key;
+
+mod app;
+mod tab_about;
+mod tab_liveboard;
+mod tab_presets;
+
+pub use app::run_tui;

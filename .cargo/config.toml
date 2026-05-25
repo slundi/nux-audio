@@ -6,7 +6,7 @@ t  = "test"
 r  = "run"
 rr = "run --release"
 
-# Faster linker on Linux — mold is provided by the Nix devShell (flake.nix).
-# Remove or comment out if you are not using mold.
+# Faster linker on Linux — use mold when in the Nix devShell (flake.nix),
+# otherwise fall back to lld which is available in the base Nix environment.
 [target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]

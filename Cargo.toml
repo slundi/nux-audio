@@ -14,7 +14,7 @@ repository = "https://codeberg.org/slundi/nux-audio"
 [dependencies]
 clap = { version = "4.6", features = ["derive", "cargo"] }
 midir = "0.11"
-log = "0.4"                     # flexi_logger = "0.31" ?
+log = "0.4"                                                # flexi_logger = "0.31" ?
 humantime = "2.3"
 xdg = "3.0"
 
@@ -23,8 +23,8 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-appender = "0.2"
 
-# textwrap = "0.16"
-# crossterm = "0.29"
+ratatui = "0.30"
+crossterm = "0.29"
 
 tokio = { version = "1.52", features = ["full"] }
 
@@ -38,8 +38,7 @@ chrono = { version = "0.4", features = ["serde"] } # For timestamps in presets
 [dev-dependencies]
 tokio-test = "0.4" # For async testing
 criterion = "0.8"  # For benchmarking
-# rstest = "0.25"
-# test-case = "3.3"
+rstest = "0.26"
 
 # [[bench]]
 # name = "effects_benchmark"

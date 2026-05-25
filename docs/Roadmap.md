@@ -111,13 +111,13 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
   - `~/.local/share/nux-audio/presets/mg30.yaml` — one file per device model, all presets as a list.
   - Each preset entry carries `slot: Option<u8>` (null = local-only), `firmware_gen`, `name`, `modified` timestamp, and per-effect knob values.
   - `slot` drives the source icon: null → `📄`, set → `📟`, both copies exist → `📟📄`.
-* [ ] 6.2 **Preset list**: single-pane with `📟`/`📄`/`📟📄` source icons, slot, name, effect summary. `/` search, `*` dirty marker.
-* [ ] 6.3 **Bottom effect chain panel**: signal-chain visualization, inline knob editing, scene switcher with `Tab`.
-* [ ] 6.4 **Live Board tab**: full-screen effect grid with all knob values, real-time CC control.
+* [x] 6.2 **Preset list**: single-pane with `📟`/`📄` source icons, slot, name, effect summary. Empty-state message when no presets exist. (search and get/send wired in later phases).
+* [x] 6.3 **Bottom effect chain panel**: all 11 MG-30 slots visualized, active slots green, scene switcher with `Tab`, slot focus with `←`/`→`, `Enter` to focus/unfocus.
+* [x] 6.4 **Live Board tab**: full-screen 11-slot grid, one column per effect, active/inactive state, scene bar.
+* [x] 6.7 **About tab**: project info (name, version, repo) and full key-bindings reference table.
 * [ ] 6.5 **Overlays**: device picker, looper, drum machine.
 * [ ] 6.6 **Get/Send**: `g` pulls device preset to local copy; `s` pushes local preset to device slot.
   - If a local copy already exists when pulling, show a 3-option popup: `[O]verride` / `[N]o` / `[R]ename with timestamp`.
-* [ ] 6.7 **About popup**: project info, repo, key bindings reference (key `?`).
 * [ ] 6.8 **Mouse support**: click to select preset/effect/knob.
 
 ## Phase 7: Community & Extensibility

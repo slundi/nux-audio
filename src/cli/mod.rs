@@ -94,6 +94,11 @@ impl Cli {
                 ref category,
                 ref model,
             } => command_model::run(&self.device_name, category, model).await,
+            Commands::Tui => {
+                if let Err(e) = tokio::task::block_in_place(crate::ui::run_tui) {
+                    eprintln!("TUI error: {e}");
+                }
+            }
             Commands::Raw {
                 ref data,
                 decimal,
@@ -171,6 +176,9 @@ pub enum Commands {
         #[arg(value_parser = parse_bypass_state)]
         state: BypassState,
     },
+
+    /// Launch the interactive TUI
+    Tui,
 
     /// Send raw SysEx data (start and end bytes are added automatically)
     Raw {
