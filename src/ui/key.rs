@@ -99,6 +99,7 @@ impl FromStr for Key {
         let mut i = 0;
 
         let mut key_part_range = 0..chars.len();
+        #[allow(clippy::while_let_loop)]
         loop {
             let Some(c) = chars.get(i) else {
                 break;
