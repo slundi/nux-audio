@@ -4,6 +4,7 @@ mod command_bypass;
 mod command_devices;
 mod command_effect;
 mod command_info;
+mod command_listen;
 mod command_model;
 mod command_preset;
 pub mod error;
@@ -94,6 +95,7 @@ impl Cli {
                 ref category,
                 ref model,
             } => command_model::run(&self.device_name, category, model).await,
+            Commands::Listen => command_listen::run(&self.device_name).await,
             Commands::Tui => {
                 if let Err(e) = tokio::task::block_in_place(crate::ui::run_tui) {
                     eprintln!("TUI error: {e}");
@@ -176,6 +178,9 @@ pub enum Commands {
         #[arg(value_parser = parse_bypass_state)]
         state: BypassState,
     },
+
+    /// Listen for incoming MIDI/SysEx messages (useful for reverse engineering)
+    Listen,
 
     /// Launch the interactive TUI
     Tui,
@@ -500,6 +505,13 @@ mod tests {
         } else {
             panic!("Expected bypass command");
         }
+    }
+
+    #[test]
+    fn test_listen_command() {
+        let args = ["guitar-fx", "listen"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert!(matches!(cli.command, Commands::Listen));
     }
 
     #[test]

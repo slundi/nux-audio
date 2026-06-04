@@ -161,11 +161,7 @@ async fn show(device_name: &Option<String>) {
     match Preset::extract_current_preset_detail_data(&detail_resp) {
         Ok(preset) => {
             println!("Name:    {}", preset.name);
-            let bpm = if preset.tempo > 0 {
-                60_000 / preset.tempo
-            } else {
-                0
-            };
+            let bpm = 60_000u32.checked_div(preset.tempo as u32).unwrap_or(0);
             println!("Tempo:   {bpm} BPM (raw: {})", preset.tempo);
             println!("Parallel:{}", preset.parallel);
             let order: Vec<&str> = preset.effect_order.iter().map(|e| e.as_str()).collect();
