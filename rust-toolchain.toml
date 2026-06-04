@@ -1,7 +1,7 @@
 [toolchain]
 # 'stable' is good, but pinning a specific version (e.g., "1.85.0")
 # ensures total reproducibility across different machines.
-channel = "stable"
+channel = "1.96.0"
 components = [
   "rustfmt",
   "clippy",
