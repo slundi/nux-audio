@@ -63,8 +63,9 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let storage = Storage::new();
+        let mut storage = Storage::new();
         let config = storage.load_config();
+        storage.apply_config(&config);
         let library = match &config.last_device {
             Some(dev) => storage.load_library(dev),
             None => PresetLibrary::new("—"),

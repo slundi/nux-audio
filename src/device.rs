@@ -147,7 +147,13 @@ impl Device {
             }
         }
 
-        devices.into_values().collect()
+        // Only return devices that have at least one input AND one output port.
+        // A device missing either direction cannot be used and would produce a
+        // confusing error later; filtering here keeps the user-facing device list clean.
+        devices
+            .into_values()
+            .filter(|d| !d.inputs.is_empty() && !d.outputs.is_empty())
+            .collect()
     }
 }
 
@@ -311,6 +317,24 @@ mod tests {
     #[test]
     fn test_extract_device_name_empty_string() {
         assert_eq!(super::Device::extract_device_name(""), "");
+    }
+
+    #[test]
+    fn test_detect_all_bidirectional() {
+        // Every device returned by detect() must have at least one input and one output.
+        // Without hardware, the list is empty and the assertion trivially holds.
+        for device in Device::detect() {
+            assert!(
+                !device.inputs.is_empty(),
+                "detect() returned device '{}' with no input ports",
+                device.name
+            );
+            assert!(
+                !device.outputs.is_empty(),
+                "detect() returned device '{}' with no output ports",
+                device.name
+            );
+        }
     }
 
     #[test]

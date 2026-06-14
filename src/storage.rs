@@ -18,6 +18,9 @@ pub enum StorageError {
     #[error("XDG base directory error: {0}")]
     Xdg(String),
 
+    #[error("cannot create directory '{path}': {detail}")]
+    CreateDir { path: String, detail: String },
+
     #[error("cannot write '{path}': {detail}")]
     WriteFile { path: String, detail: String },
 
@@ -125,6 +128,8 @@ impl PresetLibrary {
 /// Manages XDG-compliant paths and I/O for [`Config`] and [`PresetLibrary`].
 pub struct Storage {
     xdg: xdg::BaseDirectories,
+    /// Optional override for the preset library directory (from `Config::presets_dir`).
+    presets_dir: Option<PathBuf>,
 }
 
 impl Default for Storage {
@@ -137,7 +142,16 @@ impl Storage {
     pub fn new() -> Self {
         Self {
             xdg: xdg::BaseDirectories::with_prefix("nux-audio"),
+            presets_dir: None,
         }
+    }
+
+    /// Apply the relevant fields from a loaded [`Config`] to this storage instance.
+    ///
+    /// Call this after `load_config()` so that subsequent `load_library` /
+    /// `save_library` calls honour the user's `presets_dir` override.
+    pub fn apply_config(&mut self, config: &Config) {
+        self.presets_dir = config.presets_dir.clone();
     }
 
     // ── Config ────────────────────────────────────────────────────────────────
@@ -171,14 +185,20 @@ impl Storage {
 
     /// Return the expected path of the library file for `device_model`.
     ///
-    /// e.g. `"MG-30"` → `~/.local/share/nux-audio/presets/mg-30.yaml`.
+    /// Default: `~/.local/share/nux-audio/presets/mg-30.yaml`.
+    /// When `Config::presets_dir` is set, uses that directory instead:
+    /// `<presets_dir>/mg-30.yaml` (no `presets/` sub-folder).
     /// The file may not exist yet.
     pub fn library_path(&self, device_model: &str) -> PathBuf {
         let slug = device_model.to_lowercase();
-        self.xdg
-            .get_data_home()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(format!("presets/{slug}.yaml"))
+        match &self.presets_dir {
+            Some(dir) => dir.join(format!("{slug}.yaml")),
+            None => self
+                .xdg
+                .get_data_home()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(format!("presets/{slug}.yaml")),
+        }
     }
 
     /// Load the preset library for `device_model`.
@@ -191,13 +211,18 @@ impl Storage {
             .unwrap_or_else(|| PresetLibrary::new(device_model))
     }
 
-    /// Persist `library` to its XDG data path, creating parent directories as needed.
+    /// Persist `library` to its data path, creating parent directories as needed.
+    ///
+    /// Uses the `presets_dir` override when set (via [`apply_config`](Self::apply_config)),
+    /// otherwise falls back to the XDG data home.
     pub fn save_library(&self, library: &PresetLibrary) -> Result<(), StorageError> {
-        let slug = library.device.to_lowercase();
-        let path = self
-            .xdg
-            .place_data_file(format!("presets/{slug}.yaml"))
-            .map_err(|e| StorageError::Xdg(e.to_string()))?;
+        let path = self.library_path(&library.device);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| StorageError::CreateDir {
+                path: parent.display().to_string(),
+                detail: e.to_string(),
+            })?;
+        }
         let content = serde_saphyr::to_string(library)
             .map_err(|e| StorageError::YamlSerialize(e.to_string()))?;
         std::fs::write(&path, content).map_err(|e| StorageError::WriteFile {
@@ -319,6 +344,29 @@ mod tests {
 
         let path2 = storage.library_path("Mighty Plug");
         assert!(path2.to_string_lossy().ends_with("mighty plug.yaml"));
+    }
+
+    #[test]
+    fn test_library_path_override() {
+        let mut storage = Storage::new();
+        storage.apply_config(&Config {
+            last_device: None,
+            presets_dir: Some(PathBuf::from("/custom/presets")),
+        });
+        let path = storage.library_path("MG-30");
+        assert_eq!(path, PathBuf::from("/custom/presets/mg-30.yaml"));
+    }
+
+    #[test]
+    fn test_apply_config_none_presets_dir() {
+        let mut storage = Storage::new();
+        storage.apply_config(&Config {
+            last_device: Some("MG-30".to_owned()),
+            presets_dir: None,
+        });
+        // No override → XDG path, just verify slug still correct
+        let path = storage.library_path("MG-30");
+        assert!(path.to_string_lossy().ends_with("mg-30.yaml"));
     }
 
     #[test]
