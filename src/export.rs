@@ -3,6 +3,67 @@ use serde::{Deserialize, Serialize};
 use crate::cli::error::CliError;
 use crate::preset::Preset;
 
+// ── Schema migration ──────────────────────────────────────────────────────────
+
+/// Minimum recognized schema version (files older than this are rejected).
+const MIN_SUPPORTED_VERSION: u32 = 1;
+
+/// Deserialize a preset file string, applying any necessary schema migrations.
+///
+/// This is the preferred entry-point for loading preset files rather than calling
+/// [`PresetFile::from_str_fmt`] directly, because it handles version upgrades
+/// transparently:
+///
+/// - Version 1 (current): no transformation needed — returned as-is.
+/// - Versions below [`MIN_SUPPORTED_VERSION`]: rejected with a descriptive error.
+/// - Future versions above [`PRESET_FILE_VERSION`]: rejected with a descriptive
+///   error so older tool builds fail loudly rather than silently dropping fields.
+///
+/// # Adding a migration
+///
+/// When bumping `PRESET_FILE_VERSION` to N, add a match arm here that converts
+/// version N-1 data to N:
+///
+/// ```ignore
+/// 1 => {
+///     // parse as V1 (may be missing new_field)
+///     let v1: PresetFileV1 = parse_versioned(raw, format)?;
+///     PresetFile { new_field: default_value(), ..v1.into() }
+/// }
+/// ```
+pub fn migrate_preset(raw: &str, format: OutputFormat) -> Result<PresetFile, CliError> {
+    // Quick-parse only the `version` field so we can branch before full deserialization.
+    #[derive(Deserialize)]
+    struct VersionProbe {
+        version: u32,
+    }
+
+    let probe: VersionProbe = match format {
+        OutputFormat::Yaml => {
+            serde_saphyr::from_str(raw).map_err(|e| CliError::Deserialize(e.to_string()))?
+        }
+        OutputFormat::Json => {
+            serde_json::from_str(raw).map_err(|e| CliError::Deserialize(e.to_string()))?
+        }
+    };
+
+    if probe.version < MIN_SUPPORTED_VERSION {
+        return Err(CliError::Deserialize(format!(
+            "preset file version {} is no longer supported (minimum: {})",
+            probe.version, MIN_SUPPORTED_VERSION
+        )));
+    }
+    if probe.version > PRESET_FILE_VERSION {
+        return Err(CliError::Deserialize(format!(
+            "preset file version {} requires a newer nux-cli (this build supports up to v{})",
+            probe.version, PRESET_FILE_VERSION
+        )));
+    }
+
+    // Version 1 is current — no transformation needed.
+    PresetFile::from_str_fmt(raw, format)
+}
+
 /// Schema version stamped into every exported preset file.
 /// Increment when the format changes in a backwards-incompatible way.
 pub const PRESET_FILE_VERSION: u32 = 1;
@@ -305,5 +366,35 @@ mod tests {
         let restored = PresetFile::read_from_file(&tmp).unwrap();
         assert_eq!(file, restored);
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_migrate_preset_current_version_roundtrip() {
+        let preset = sample_preset();
+        let file = PresetFile::from_preset(&preset, "MG-30");
+        let yaml = serde_saphyr::to_string(&file).unwrap();
+        let restored = migrate_preset(&yaml, OutputFormat::Yaml).unwrap();
+        assert_eq!(file, restored);
+    }
+
+    #[test]
+    fn test_migrate_preset_rejects_future_version() {
+        let raw = "version: 9999\ndevice: MG-30\nslot: 01A\nname: Test\ntempo_ms: 500\nparallel: 0\nactive_scene: 0\neffect_order: []\n";
+        let result = migrate_preset(raw, OutputFormat::Yaml);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("newer nux-cli"));
+    }
+
+    #[test]
+    fn test_migrate_preset_rejects_version_zero() {
+        let raw = "version: 0\ndevice: MG-30\nslot: 01A\nname: Test\ntempo_ms: 500\nparallel: 0\nactive_scene: 0\neffect_order: []\n";
+        let result = migrate_preset(raw, OutputFormat::Yaml);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("no longer supported")
+        );
     }
 }

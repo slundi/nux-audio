@@ -27,8 +27,10 @@ pub const CC_BYPASS_OFF: u8 = 0x00;
 /// GEN2 = firmware ≥ 5.x (222-byte detail response, expanded model set).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, Serialize, Deserialize)]
 pub enum FirmwareGen {
+    /// First generation firmware (≤ 4.x); 218-byte detail response.
     #[default]
     Gen1,
+    /// Second generation firmware (≥ 5.x / version ≥ 600); 222-byte detail response.
     Gen2,
 }
 
@@ -47,20 +49,33 @@ impl FirmwareGen {
     }
 }
 
+/// Signal-chain slot category for MG-30 effects.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 #[repr(u8)]
 pub enum EffectCategory {
+    /// Wah / auto-wah filter slot (CC 0).
     Wah = 0,
+    /// Compressor / limiter slot (CC 1).
     Comp = 1,
+    /// Effects (distortion, overdrive, boost, etc.) slot (CC 2).
     Efx = 2,
+    /// Amp model slot (CC 3).
     Amp = 3,
+    /// Equalizer slot (CC 4).
     Eq = 4,
+    /// Noise gate slot (CC 5).
     Gate = 5,
+    /// Modulation effects (chorus, flanger, phaser, etc.) slot (CC 6).
     Mod = 6,
+    /// Delay / echo slot (CC 7).
     Delay = 7,
+    /// Reverb slot (CC 8).
     Reverb = 8,
+    /// Impulse Response (cabinet simulation) slot (CC 9).
     Ir = 9,
+    /// Send/Return (effects loop) slot (CC 10); no bypass toggle.
     Sr = 10,
+    /// Master volume slot (CC 11); no bypass toggle.
     #[default]
     Vol = 11,
 }
@@ -145,8 +160,8 @@ impl std::str::FromStr for EffectCategory {
 #[derive(Default, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct EffectOption {
     /// Model ID as transmitted in SysEx messages.
-    /// IDs marked [confirmed] in effects.yaml are from hardware reverse-engineering.
-    /// IDs marked [provisional] are inferred from sequential ordering.
+    /// IDs marked "confirmed" are from hardware reverse-engineering;
+    /// IDs marked "provisional" are inferred from sequential ordering.
     pub id: u8,
     pub title: String,
     pub on_byte: u8,

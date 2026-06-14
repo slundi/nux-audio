@@ -1,24 +1,75 @@
 # nux-audio
 
-Manage NUX audio devices.
+CLI + TUI tool to manage NUX audio devices over MIDI on Linux (and macOS/Windows).
 
-This is a tool to manage your Nux devices 🎸. I own a various Nux products:
-* [MG30](https://nuxaudio.com/product/mg30/)
-* [Amp Academy](https://nuxaudio.com/product/ampacademy/)
-* [MLD Bass Preamp + DI](https://nuxaudio.com/product/mldbasspreampdi/)
-* [Mighty Plug Pro (MP3)](https://nuxaudio.com/product/mightyplugpro/)
+Control presets, effects, bypass states, and more — entirely from the terminal, no
+proprietary NUX app required.
 
-I'm a Linux user so I want to manage those devices in my current OS.
+> **Early-stage (0.1.0):** core CLI commands and the interactive TUI are functional.
+> MIDI integration into the TUI is still in progress. Contributions welcome!
 
-I have based my work on 2 projects ([NuxOnline](https://github.com/Srijan619/nuxOnline) and [Mightier Amp](https://github.com/tuntorius/mightier_amp)).
+Based on reverse-engineering work from [NuxOnline](https://github.com/Srijan619/nuxOnline)
+and [Mightier Amp](https://github.com/tuntorius/mightier_amp).
 
-This project is in early stage, so don't expect to manage tour device yet. But, if you want to help me you are welcome 🙂
+## Supported Devices
+
+| Device | Model Code | Status |
+|--------|-----------|--------|
+| NUX MG-30 Versatile Modeler | MG-30 | Active development |
+| NUX Mighty Plug Pro | MP-3 | Partial |
+| NUX Mighty Space | MS-1 | Partial |
+| NUX Mighty Plug MP-2 | MP-2 | Partial |
+| NUX Mighty Air | MA-1 | Partial |
+| NUX Mighty Lite BT MKII | ML-2 | Partial |
+
+Only devices connected via USB-MIDI are supported. Bluetooth MIDI is not supported on Linux.
 
 ## Installation
 
-1. Install the [🦀 Rust toolchain](https://www.rust-lang.org/tools/install) if you don't have it
-2. clone this repository
-3. in the project folder, run `cargo build --release`, the binary file will be in `./target/release/nux-audio`
+### From source (recommended)
+
+1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install) (stable, 1.85+)
+2. Install ALSA development headers (Linux): `sudo apt install libasound2-dev` (Debian/Ubuntu) or `sudo pacman -S alsa-lib` (Arch)
+3. Clone and build:
+
+```shell
+git clone https://codeberg.org/slundi/nux-audio
+cd nux-audio
+cargo build --release
+# Binary is at: ./target/release/nux-cli
+```
+
+### NixOS / nix develop
+
+```shell
+git clone https://codeberg.org/slundi/nux-audio
+cd nux-audio
+nix develop    # enter the dev shell with all tools available
+cargo build --release
+```
+
+## Quickstart
+
+```shell
+# List connected NUX devices
+nux-cli devices
+
+# Show current preset info (name, tempo, scenes)
+nux-cli preset show
+
+# Set amp gain to 80, tone to 50
+nux-cli effect amp gain=80 tone=50
+
+# Bypass / enable the delay slot
+nux-cli bypass delay off
+nux-cli bypass delay on
+
+# Export current preset to YAML
+nux-cli preset export -o my-preset.yaml
+
+# Launch the interactive TUI
+nux-cli tui
+```
 
 ## Usage
 

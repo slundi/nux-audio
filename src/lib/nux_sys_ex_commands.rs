@@ -26,7 +26,7 @@ pub enum TemplateSlot {
 ///
 /// Templates hold a mix of fixed bytes and named [`TemplateSlot::Param`] slots.
 /// Call [`build`](SysExTemplate::build) with a `name → value` map to get the
-/// concrete payload ready for [`MidiManager::send_sysex`].
+/// concrete payload ready for `MidiManager::send_sysex`.
 ///
 /// # Example
 /// ```
@@ -85,13 +85,21 @@ pub const REQUEST_UPDATED_EFFECT_ORDER_COMMAND: [u8; 4] = [0x58, 0x70, 0x0C, 0x0
 
 // ── Response patterns (full wire messages including F0 / F7) ─────────────────
 
+/// Header bytes that identify a device firmware version response.
 pub const DEVICE_VERSION_RESPONSE_PATTERN: [u8; 4] = [0xf0, 0x43, 0x58, 0x10];
+/// Header bytes that identify a current-preset basic data response.
 pub const CURRENT_PRESET_BASIC_RESPONSE_PATTERN: [u8; 6] = [0xf0, 0x43, 0x58, 0x70, 0x15, 0x02];
+/// Header bytes that identify a current-preset detailed data response (222 bytes on GEN2).
 pub const CURRENT_PRESET_DETAIL_RESPONSE_PATTERN: [u8; 6] = [0xf0, 0x43, 0x58, 0x70, 0x0b, 0x02];
+/// Header bytes that identify an updated effect-order response.
 pub const UPDATED_EFFECTS_ORDER_RESPONSE_PATTERN: [u8; 6] = [0xf0, 0x43, 0x58, 0x70, 0x0c, 0x02];
+/// Leading byte of a MIDI Program Change message indicating a preset switch.
 pub const PRESET_CHANGED_RESPONSE_PATTERN: [u8; 1] = [0xc0];
+/// Leading bytes of a CC `0x4F` message indicating a scene change.
 pub const SCENE_CHANGED_RESPONSE_PATTERN: [u8; 2] = [0xb0, 0x4f];
+/// Leading byte of a MIDI CC message indicating an effect parameter change.
 pub const EFFECT_CHANGED_RESPONSE_PATTERN: [u8; 1] = [0xb0];
+/// Full SysEx header identifying an effect signal-chain order change notification.
 pub const EFFECT_ORDER_CHANGED_RESPONSE_PATTERN: [u8; 7] =
     [0xf0, 0x43, 0x58, 0x70, 0x7e, 0x02, 0x0d];
 
@@ -141,9 +149,13 @@ pub fn extract_sysex_message(message: &[u8]) -> Result<&[u8], NuxAudioError> {
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LooperCommand {
+    /// Stop looper playback and discard the current loop.
     Stop = 0x00,
+    /// Begin recording a new loop layer.
     Record = 0x01,
+    /// Play back the recorded loop without adding new material.
     Play = 0x02,
+    /// Play the loop while simultaneously recording a new layer on top.
     Overdub = 0x03,
 }
 
@@ -296,7 +308,7 @@ pub mod templates {
         }
     }
 
-    /// MG-30: switch the active model within an effect slot [provisional].
+    /// MG-30: switch the active model within an effect slot (provisional).
     ///
     /// Parameters: `"category_id"` (`EffectCategory as u8`), `"model_id"` (catalog byte).
     pub fn mg30_effect_model_change() -> SysExTemplate {

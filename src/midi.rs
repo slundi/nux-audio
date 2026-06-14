@@ -8,7 +8,7 @@ use tokio::sync::broadcast;
 
 /// Abstraction over MIDI send operations.
 ///
-/// Implemented by [`MidiManager`] for real hardware and by [`MockMidi`] (test-only)
+/// Implemented by [`MidiManager`] for real hardware and by `MockMidi` (test-only, `#[cfg(test)]`)
 /// so that command logic can be unit-tested without a physical device.
 pub trait MidiSend {
     fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>>;
@@ -16,6 +16,10 @@ pub trait MidiSend {
 }
 
 const DISPATCHER_CAPACITY: usize = 64;
+
+/// Minimum delay enforced between successive `send_cc` calls.
+/// Protects device firmware from being overwhelmed by rapid CC floods.
+const MIN_CC_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
 
 /// Async MIDI response dispatcher backed by a `tokio::sync::broadcast` channel.
 ///
@@ -37,8 +41,8 @@ impl MidiDispatcher {
 
     /// Wait asynchronously for the first message whose bytes start with `pattern`.
     ///
-    /// Returns [`NuxError::ResponseTimeout`] if no matching message arrives within
-    /// `timeout`, and [`NuxError::ChannelClosed`] if the sender is dropped.
+    /// Returns [`crate::error::NuxError::ResponseTimeout`] if no matching message arrives within
+    /// `timeout`, and [`crate::error::NuxError::ChannelClosed`] if the sender is dropped.
     pub async fn await_response(
         &self,
         pattern: &[u8],
@@ -72,6 +76,8 @@ pub struct MidiManager {
     output: MidiOutput,
     connection_in: Option<MidiInputConnection<()>>,
     connection_out: Option<MidiOutputConnection>,
+    /// Timestamp of the last successful CC send — used to enforce `MIN_CC_INTERVAL`.
+    last_cc_sent: Option<std::time::Instant>,
 }
 
 impl MidiManager {
@@ -84,6 +90,7 @@ impl MidiManager {
             output,
             connection_in: None,
             connection_out: None,
+            last_cc_sent: None,
         })
     }
 
@@ -265,8 +272,19 @@ impl MidiManager {
         if value > 127 {
             return Err(crate::error::NuxError::CcValueOutOfRange(value).into());
         }
+        // Enforce a minimum inter-command gap so the device firmware is never flooded.
+        if let Some(last) = self.last_cc_sent {
+            let elapsed = last.elapsed();
+            if elapsed < MIN_CC_INTERVAL {
+                std::thread::sleep(MIN_CC_INTERVAL - elapsed);
+            }
+        }
         // 0xB0 = Control Change on MIDI channel 1 (0-indexed channel 0)
-        self.send_raw_midi(&[0xB0, control, value])
+        let result = self.send_raw_midi(&[0xB0, control, value]);
+        if result.is_ok() {
+            self.last_cc_sent = Some(std::time::Instant::now());
+        }
+        result
     }
 
     /// Disconnect from the current MIDI device

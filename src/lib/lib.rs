@@ -1,3 +1,6 @@
+//! Low-level library crate that ships with the binary — MIDI utilities, SysEx builders,
+//! and NUX-specific command constants re-exported through the `nux_audio` crate.
+
 pub mod error;
 pub mod midi;
 pub mod nux_sys_ex_commands;

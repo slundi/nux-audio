@@ -106,7 +106,10 @@ impl Cli {
                 decimal,
                 with_prefixes: _,
             } => {
-                // TODO: prepare string to be sent
+                eprintln!(
+                    "WARNING: Raw SysEx bypasses all safety checks. \
+                     Sending incorrect data may cause device malfunctions or data loss."
+                );
                 let prepared = data.join(" ");
                 if decimal {
                     match decimal_string_to_vec_u8(&prepared) {
@@ -186,6 +189,8 @@ pub enum Commands {
     Tui,
 
     /// Send raw SysEx data (start and end bytes are added automatically)
+    ///
+    /// WARNING: bypasses all safety checks — use only for debugging/reverse-engineering.
     Raw {
         /// Hex or decimal byte sequence
         data: Vec<String>,
