@@ -10,10 +10,10 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, FirmwareGen, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8, end: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(end),
         ctrl: cc,
@@ -21,13 +21,13 @@ fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'stat
 }
 
 /// MG-30 modulation model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     HashMap::from([
         (
             0x10,
             EffectOption {
                 id: 0x10,
-                title: "CE-1",
+                title: "CE-1".into(),
                 knobs: vec![
                     knob("intensity", "INTENSITY", 46, 100),
                     knob("depth", "DEPTH", 47, 100),
@@ -41,7 +41,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x11,
             EffectOption {
                 id: 0x11,
-                title: "CE-2",
+                title: "CE-2".into(),
                 knobs: vec![
                     knob("rate", "RATE", 46, 100),
                     knob("depth", "DEPTH", 47, 100),
@@ -54,7 +54,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x12,
             EffectOption {
                 id: 0x12,
-                title: "ST. Chorus",
+                title: "ST. Chorus".into(),
                 knobs: vec![
                     knob("intensity", "INTENSITY", 46, 100),
                     knob("width", "WIDTH", 47, 100),
@@ -68,7 +68,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x13,
             EffectOption {
                 id: 0x13,
-                title: "Vibrator",
+                title: "Vibrator".into(),
                 knobs: vec![
                     knob("rate", "RATE", 46, 100),
                     knob("depth", "DEPTH", 47, 100),
@@ -81,7 +81,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x14,
             EffectOption {
                 id: 0x14,
-                title: "Detune",
+                title: "Detune".into(),
                 knobs: vec![
                     knob("shift_l", "SHIFT LEFT", 46, 100),
                     knob("mix_l", "MIX L", 47, 100),
@@ -95,7 +95,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x15,
             EffectOption {
                 id: 0x15,
-                title: "Flanger",
+                title: "Flanger".into(),
                 knobs: vec![
                     knob("level", "LEVEL", 46, 100),
                     knob("rate", "RATE", 47, 100),
@@ -110,7 +110,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x16,
             EffectOption {
                 id: 0x16,
-                title: "Phase 90",
+                title: "Phase 90".into(),
                 knobs: vec![
                     knob("speed", "SPEED", 46, 100),
                     knob("subdiv", "SUB DIV", 47, 6),
@@ -122,7 +122,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x17,
             EffectOption {
                 id: 0x17,
-                title: "Phase 100",
+                title: "Phase 100".into(),
                 knobs: vec![
                     knob("intensity", "INTENSITY", 46, 100),
                     knob("speed", "SPEED", 47, 100),
@@ -135,7 +135,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x18,
             EffectOption {
                 id: 0x18,
-                title: "S.C.F.",
+                title: "S.C.F.".into(),
                 knobs: vec![
                     knob("speed", "SPEED", 46, 100),
                     knob("width", "WIDTH", 47, 100),
@@ -150,7 +150,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x19,
             EffectOption {
                 id: 0x19,
-                title: "U-Vibe",
+                title: "U-Vibe".into(),
                 knobs: vec![
                     knob("speed", "SPEED", 46, 100),
                     knob("volume", "VOLUME", 47, 100),
@@ -165,7 +165,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x1A,
             EffectOption {
                 id: 0x1A,
-                title: "Tremolo",
+                title: "Tremolo".into(),
                 knobs: vec![
                     knob("rate", "RATE", 46, 100),
                     knob("depth", "DEPTH", 47, 100),
@@ -178,7 +178,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x1B,
             EffectOption {
                 id: 0x1B,
-                title: "Rotar",
+                title: "Rotar".into(),
                 knobs: vec![
                     knob("balance", "BALANCE", 46, 100),
                     knob("speed", "SPEED", 47, 100),
@@ -191,7 +191,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x1C,
             EffectOption {
                 id: 0x1C,
-                title: "Mono Octave",
+                title: "Mono Octave".into(),
                 min_gen: FirmwareGen::Gen2,
                 // ID provisional — knob order from device UI
                 knobs: vec![

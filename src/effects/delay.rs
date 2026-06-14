@@ -10,10 +10,10 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8, end: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(end),
         ctrl: cc,
@@ -21,13 +21,13 @@ fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'stat
 }
 
 /// MG-30 delay model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     HashMap::from([
         (
             0x20,
             EffectOption {
                 id: 0x20,
-                title: "Analog Delay",
+                title: "Analog Delay".into(),
                 knobs: vec![
                     knob("repeat", "REPEAT", 52, 100),
                     knob("echo", "ECHO", 53, 100),
@@ -41,7 +41,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x21,
             EffectOption {
                 id: 0x21,
-                title: "Digi Delay",
+                title: "Digi Delay".into(),
                 knobs: vec![
                     knob("level", "EFFECT LEVEL", 52, 100),
                     knob("fback", "FEEDBACK", 53, 100),
@@ -55,7 +55,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x22,
             EffectOption {
                 id: 0x22,
-                title: "Modulation",
+                title: "Modulation".into(),
                 knobs: vec![
                     knob("time", "TIME", 52, 100),
                     knob("level", "LEVEL", 53, 100),
@@ -70,7 +70,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x23,
             EffectOption {
                 id: 0x23,
-                title: "Tape Echo",
+                title: "Tape Echo".into(),
                 knobs: vec![
                     knob("time", "TIME", 52, 100),
                     knob("level", "LEVEL", 53, 100),
@@ -84,7 +84,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x24,
             EffectOption {
                 id: 0x24,
-                title: "Reverse Delay",
+                title: "Reverse Delay".into(),
                 knobs: vec![
                     knob("time", "TIME", 52, 100),
                     knob("mix", "MIX", 53, 100),
@@ -98,7 +98,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x25,
             EffectOption {
                 id: 0x25,
-                title: "Pan Delay",
+                title: "Pan Delay".into(),
                 knobs: vec![
                     knob("time", "TIME", 52, 100),
                     knob("repeat", "REPEAT", 53, 100),
@@ -112,7 +112,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x26,
             EffectOption {
                 id: 0x26,
-                title: "Duotime",
+                title: "Duotime".into(),
                 knobs: vec![
                     knob("level", "LEVEL", 52, 100),
                     knob("time1", "TIME1", 53, 100),

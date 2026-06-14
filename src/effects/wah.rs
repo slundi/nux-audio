@@ -10,10 +10,10 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8, end: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(end),
         ctrl: cc,
@@ -21,13 +21,13 @@ fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'stat
 }
 
 /// MG-30 wah model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     HashMap::from([
         (
             0x01,
             EffectOption {
                 id: 0x01,
-                title: "Clyde",
+                title: "Clyde".into(),
                 on_byte: 0x02,
                 off_byte: 0x41,
                 knobs: vec![],
@@ -38,7 +38,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x02,
             EffectOption {
                 id: 0x02,
-                title: "Cry BB",
+                title: "Cry BB".into(),
                 on_byte: 0x04,
                 off_byte: 0x42,
                 knobs: vec![],
@@ -49,7 +49,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x03,
             EffectOption {
                 id: 0x03,
-                title: "V847",
+                title: "V847".into(),
                 on_byte: 0x06,
                 off_byte: 0x43,
                 knobs: vec![],
@@ -60,7 +60,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x04,
             EffectOption {
                 id: 0x04,
-                title: "Horse Wah",
+                title: "Horse Wah".into(),
                 on_byte: 0x08,
                 off_byte: 0x44,
                 knobs: vec![
@@ -74,7 +74,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x05,
             EffectOption {
                 id: 0x05,
-                title: "Octave Shift",
+                title: "Octave Shift".into(),
                 on_byte: 0x0A,
                 off_byte: 0x45,
                 knobs: vec![knob("direction", "UP/DOWN", 12, 1)],

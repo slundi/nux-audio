@@ -10,10 +10,10 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8, end: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(end),
         ctrl: cc,
@@ -21,13 +21,13 @@ fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'stat
 }
 
 /// MG-30 EQ model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     HashMap::from([
         (
             0x00,
             EffectOption {
                 id: 0x00,
-                title: "6-Band EQ",
+                title: "6-Band EQ".into(),
                 knobs: vec![
                     knob("hz100", "100Hz", 30, 100),
                     knob("hz220", "220Hz", 31, 100),
@@ -44,7 +44,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x01,
             EffectOption {
                 id: 0x01,
-                title: "Align EQ",
+                title: "Align EQ".into(),
                 knobs: vec![
                     knob("hpf", "HPF", 30, 2), // 0=50Hz 1=80Hz 2=160Hz
                     knob("hz110", "110Hz", 31, 100),
@@ -62,7 +62,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x02,
             EffectOption {
                 id: 0x02,
-                title: "10-Band EQ",
+                title: "10-Band EQ".into(),
                 knobs: vec![
                     knob("vol", "VOL", 30, 100),
                     knob("hz31", "31Hz", 31, 100),
@@ -84,7 +84,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x03,
             EffectOption {
                 id: 0x03,
-                title: "Para EQ",
+                title: "Para EQ".into(),
                 knobs: vec![
                     knob("b1_freq", "BAND1 FREQ", 30, 100),
                     knob("b1_gain", "BAND1 GAIN", 31, 100),

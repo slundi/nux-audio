@@ -151,13 +151,13 @@ impl Device {
     }
 }
 
-pub struct ControllerState<'a> {
+pub struct ControllerState {
     pub device: Device,
     pub device_connected: bool,
     /// Firmware version as a semver tuple — parse from `extract_version` with `semver_to_tuple`.
     pub device_version: (u8, u8, u8),
     pub active: bool,
-    pub presets: Vec<Preset<'a>>,
+    pub presets: Vec<Preset>,
     pub is_fetching_preset: bool,
 }
 

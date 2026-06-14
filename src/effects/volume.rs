@@ -6,10 +6,10 @@
 
 use super::KnobDef;
 
-fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(100),
         ctrl: cc,
@@ -18,7 +18,7 @@ fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
 
 /// Volume/Send-Return knob definitions for MG-30.
 /// This slot has no selectable models — the knobs are always available.
-pub fn knobs() -> Vec<KnobDef<'static>> {
+pub fn knobs() -> Vec<KnobDef> {
     vec![
         knob("patch_vol", "PATCH VOLUME", 72),
         knob("send", "SEND", 70),

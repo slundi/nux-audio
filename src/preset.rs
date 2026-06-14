@@ -13,7 +13,7 @@ const PRESET_LETTERS: [char; 4] = ['A', 'B', 'C', 'D'];
 pub struct SceneSnapshot(pub [u8; 3]);
 
 #[derive(Default, Clone, Debug)]
-pub struct Preset<'a> {
+pub struct Preset {
     pub number: u8,
     /// Raw tempo value encoded as `response[143] * 64 + response[144]`.
     /// This is milliseconds-per-beat; convert to BPM with `60_000 / tempo`.
@@ -26,10 +26,10 @@ pub struct Preset<'a> {
     pub active_scene_number: Option<u8>,
     /// Per-scene bypass snapshots (3 scenes on MG-30).
     pub scenes: Vec<SceneSnapshot>,
-    pub effects: HashMap<EffectCategory, EffectOption<'a>>,
+    pub effects: HashMap<EffectCategory, EffectOption>,
 }
 
-impl Preset<'_> {
+impl Preset {
     pub fn get_preset_code(&self) -> String {
         Self::format_code(self.number)
     }

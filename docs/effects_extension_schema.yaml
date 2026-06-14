@@ -1,0 +1,25 @@
+# NUX Audio — effect model extension schema
+# Place files matching this format under ~/.config/nux-audio/effects/*.yaml
+# to add custom/community models without recompiling.
+#
+# Built-in models take precedence; user models fill any gaps.
+
+category: amp   # one of: wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir
+
+models:
+  - id: 0x1E          # hex or decimal model ID (must not conflict with built-in IDs)
+    title: "My Amp"
+    on_byte: 0x01
+    off_byte: 0x00
+    category_color: 16711680  # 0xFF0000 as decimal
+    min_gen: Gen1       # Gen1 or Gen2
+    knobs:
+      - id: gain
+        title: GAIN
+        ctrl: 22        # MIDI CC number
+        range_start: 0
+        range_end: 127
+      - id: level
+        title: LEVEL
+        ctrl: 29
+        range_end: 100

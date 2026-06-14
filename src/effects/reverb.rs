@@ -11,10 +11,10 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, FirmwareGen, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(100),
         ctrl: cc,
@@ -22,13 +22,13 @@ fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
 }
 
 /// MG-30 reverb model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     HashMap::from([
         (
             0x00,
             EffectOption {
                 id: 0x00,
-                title: "Room",
+                title: "Room".into(),
                 knobs: vec![
                     knob("decay", "DECAY", 60),
                     knob("tone", "TONE", 61),
@@ -41,7 +41,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x04,
             EffectOption {
                 id: 0x04,
-                title: "Hall",
+                title: "Hall".into(),
                 knobs: vec![
                     knob("decay", "DECAY", 60),
                     knob("predelay", "PRE DELAY", 61),
@@ -55,7 +55,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x06,
             EffectOption {
                 id: 0x06,
-                title: "Plate",
+                title: "Plate".into(),
                 knobs: vec![knob("decay", "DECAY", 60), knob("level", "LEVEL", 61)],
                 ..Default::default()
             },
@@ -64,7 +64,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x08,
             EffectOption {
                 id: 0x08,
-                title: "Spring",
+                title: "Spring".into(),
                 knobs: vec![knob("decay", "DECAY", 60), knob("level", "LEVEL", 61)],
                 ..Default::default()
             },
@@ -73,7 +73,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x0A,
             EffectOption {
                 id: 0x0A,
-                title: "Shimmer",
+                title: "Shimmer".into(),
                 knobs: vec![
                     knob("mix", "MIX", 60),
                     knob("decay", "DECAY", 61),
@@ -86,7 +86,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x0C,
             EffectOption {
                 id: 0x0C,
-                title: "Damp",
+                title: "Damp".into(),
                 min_gen: FirmwareGen::Gen2,
                 knobs: vec![knob("mix", "MIX", 60), knob("depth", "DEPTH", 61)],
                 ..Default::default()
