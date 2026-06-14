@@ -170,7 +170,10 @@ pub struct ControllerState<'a> {
 /// Extract version string from a SysEx response. SysEx framing bytes must have been removed.
 pub fn extract_version(response: &[u8]) -> Result<String, NuxError> {
     if response.len() < 6 {
-        return Err(NuxError::ResponseTooShort(response.len()));
+        return Err(NuxError::ResponseTooShort {
+            expected: 6,
+            actual: response.len(),
+        });
     }
     let version_bytes = &response[4..response.len() - 1];
     let version = String::from_utf8(version_bytes.to_vec())?;

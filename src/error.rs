@@ -16,14 +16,17 @@ pub enum NuxError {
     },
 
     // ── Device response parsing ───────────────────────────────────────────────
-    #[error("SysEx response too short: {0} bytes (expected at least 6)")]
-    ResponseTooShort(usize),
+    #[error("SysEx response too short: {actual} bytes (expected at least {expected})")]
+    ResponseTooShort { expected: usize, actual: usize },
 
     #[error("cannot parse firmware version from '{0}'")]
     VersionParse(String),
 
     #[error("invalid UTF-8 in device response: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
+
+    #[error("invalid byte 0x{0:02X} in preset name (expected printable ASCII)")]
+    InvalidPresetName(u8),
 
     // ── Effect catalog lookup ─────────────────────────────────────────────────
     #[error(

@@ -3,6 +3,7 @@
 // Exposes `EffectParameter`, `KnobIdentifier`, parameter parsers, and `run()`.
 
 use crate::effects::{EffectCategory, find_cc_for_knob};
+use crate::midi::MidiSend;
 
 #[derive(Debug, Clone)]
 pub struct EffectParameter {
@@ -57,6 +58,33 @@ pub fn parse_effect_params_from_string(input: &str) -> Result<Vec<EffectParamete
         .collect()
 }
 
+/// Send a single knob parameter to the device via CC.
+///
+/// Resolves named knobs (e.g. `"gain"`) to CC numbers via the static catalog.
+/// Returns `(cc, value)` on success, or an error string for display.
+/// Extracted from `run()` so it can be tested without a real MIDI connection.
+pub(crate) fn send_effect(
+    manager: &mut impl MidiSend,
+    category: EffectCategory,
+    param: &EffectParameter,
+) -> Result<(u8, u8), String> {
+    let cc = match &param.knob {
+        KnobIdentifier::Id(n) => *n,
+        KnobIdentifier::Name(name) => {
+            find_cc_for_knob(category, name.as_str()).ok_or_else(|| {
+                format!(
+                    "Knob '{name}' not found in {} catalog. Use a CC number directly (e.g. 22=80).",
+                    category.as_str()
+                )
+            })?
+        }
+    };
+    manager
+        .send_cc(cc, param.value)
+        .map_err(|e| format!("Failed to send CC{cc}={}: {e}", param.value))?;
+    Ok((cc, param.value))
+}
+
 /// Send MIDI CC messages for each knob parameter on the given effect category.
 ///
 /// Named knobs (e.g. `"gain"`) are resolved to CC numbers via the static catalog.
@@ -80,30 +108,14 @@ pub async fn run(device_name: &Option<String>, effect: &str, parameters: &[Effec
 
     let mut errors = 0usize;
     for param in parameters {
-        let cc = match &param.knob {
-            KnobIdentifier::Id(n) => *n,
-            KnobIdentifier::Name(name) => match find_cc_for_knob(category, name.as_str()) {
-                Some(cc) => cc,
-                None => {
-                    eprintln!(
-                        "Knob '{name}' not found in {} catalog. \
-                         Use a CC number directly (e.g. 22=80).",
-                        category.as_str()
-                    );
-                    errors += 1;
-                    continue;
-                }
-            },
-        };
-        match session.manager.send_cc(cc, param.value) {
-            Ok(()) => println!(
-                "CC{cc}={} → {} ({})",
-                param.value,
+        match send_effect(&mut session.manager, category, param) {
+            Ok((cc, value)) => println!(
+                "CC{cc}={value} → {} ({})",
                 category.as_str(),
                 session.device.model
             ),
             Err(e) => {
-                eprintln!("Failed to send CC{cc}={}: {e}", param.value);
+                eprintln!("{e}");
                 errors += 1;
             }
         }
@@ -117,6 +129,7 @@ pub async fn run(device_name: &Option<String>, effect: &str, parameters: &[Effec
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::midi::MockMidi;
 
     #[test]
     fn test_parse_multiple_effect_params() {
@@ -141,5 +154,59 @@ mod tests {
         let result = parse_effect_parameters("gain=invalid");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid value"));
+    }
+
+    #[test]
+    fn test_send_effect_named_knob_resolves_cc() {
+        let mut mock = MockMidi::new();
+        let param = EffectParameter {
+            knob: KnobIdentifier::Name("gain".to_owned()),
+            value: 80,
+        };
+        let (cc, value) = send_effect(&mut mock, EffectCategory::Amp, &param).unwrap();
+        // Amp gain is CC22 per MIDI_CC_assignments.md
+        assert_eq!(cc, 22);
+        assert_eq!(value, 80);
+        assert_eq!(mock.sent, vec![vec![0xB0, 22, 80]]);
+    }
+
+    #[test]
+    fn test_send_effect_numeric_cc_direct() {
+        let mut mock = MockMidi::new();
+        let param = EffectParameter {
+            knob: KnobIdentifier::Id(52),
+            value: 64,
+        };
+        let (cc, value) = send_effect(&mut mock, EffectCategory::Delay, &param).unwrap();
+        assert_eq!(cc, 52);
+        assert_eq!(value, 64);
+        assert_eq!(mock.sent, vec![vec![0xB0, 52, 64]]);
+    }
+
+    #[test]
+    fn test_send_effect_unknown_knob_name_errors() {
+        let mut mock = MockMidi::new();
+        let param = EffectParameter {
+            knob: KnobIdentifier::Name("nonexistent".to_owned()),
+            value: 50,
+        };
+        let result = send_effect(&mut mock, EffectCategory::Amp, &param);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+        assert!(mock.sent.is_empty());
+    }
+
+    #[test]
+    fn test_send_effect_propagates_midi_error() {
+        let mut mock = MockMidi {
+            should_fail: true,
+            ..MockMidi::new()
+        };
+        let param = EffectParameter {
+            knob: KnobIdentifier::Id(22),
+            value: 80,
+        };
+        let result = send_effect(&mut mock, EffectCategory::Amp, &param);
+        assert!(result.is_err());
     }
 }

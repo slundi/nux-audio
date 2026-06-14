@@ -54,7 +54,10 @@ impl Preset<'_> {
     pub fn extract_current_preset_basic_data(response: &[u8]) -> Result<Self, NuxError> {
         const MIN_LEN: usize = 10;
         if response.len() < MIN_LEN {
-            return Err(NuxError::ResponseTooShort(response.len()));
+            return Err(NuxError::ResponseTooShort {
+                expected: MIN_LEN,
+                actual: response.len(),
+            });
         }
         Ok(Self {
             number: response[6],
@@ -81,7 +84,10 @@ impl Preset<'_> {
     pub fn extract_current_preset_detail_data(response: &[u8]) -> Result<Self, NuxError> {
         const MIN_LEN: usize = 217;
         if response.len() < MIN_LEN {
-            return Err(NuxError::ResponseTooShort(response.len()));
+            return Err(NuxError::ResponseTooShort {
+                expected: MIN_LEN,
+                actual: response.len(),
+            });
         }
 
         let number = response[6];
@@ -118,10 +124,20 @@ impl Preset<'_> {
         let mut name = String::with_capacity(16);
         let mut counter = 0usize;
         while counter < response.len() {
-            if response[counter] == 0 {
+            let b = response[counter];
+            if b == 0 {
                 break;
             }
-            name.push(response[counter] as char);
+            // Bytes > 127 are not valid ASCII; the MG-30 only uses printable ASCII
+            // in preset names. Non-printable ASCII control chars (< 0x20, 0x7F)
+            // are treated as end-of-name rather than errors.
+            if b > 127 {
+                return Err(NuxError::InvalidPresetName(b));
+            }
+            if b < b' ' || b == 127 {
+                break;
+            }
+            name.push(b as char);
 
             // Need two more bytes for the pair encoding; stop early if truncated.
             if counter + 2 >= response.len() {
@@ -170,7 +186,7 @@ mod tests {
         let short = vec![0xF0, 0x43, 0x58, 0x70, 0x15, 0x02, 0x05];
         assert!(matches!(
             Preset::extract_current_preset_basic_data(&short),
-            Err(NuxError::ResponseTooShort(_))
+            Err(NuxError::ResponseTooShort { .. })
         ));
     }
 
@@ -199,11 +215,28 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_name_non_ascii_errors() {
+        let bytes = [0xC0u8, 0x00, 0x00]; // 0xC0 > 127
+        assert!(matches!(
+            Preset::extract_name(&bytes),
+            Err(NuxError::InvalidPresetName(0xC0))
+        ));
+    }
+
+    #[test]
+    fn test_extract_name_control_char_stops() {
+        // ASCII control chars (< 0x20) silently terminate the name
+        let bytes = [b'A', 0x01, 0x00]; // 'A', then control char
+        let name = Preset::extract_name(&bytes).unwrap();
+        assert_eq!(name, "A");
+    }
+
+    #[test]
     fn test_extract_current_preset_detail_data_too_short() {
         let short = vec![0u8; 100];
         assert!(matches!(
             Preset::extract_current_preset_detail_data(&short),
-            Err(NuxError::ResponseTooShort(_))
+            Err(NuxError::ResponseTooShort { .. })
         ));
     }
 

@@ -215,6 +215,10 @@ impl Storage {
     ///
     /// Uses the `presets_dir` override when set (via [`apply_config`](Self::apply_config)),
     /// otherwise falls back to the XDG data home.
+    ///
+    /// The write is atomic: data is serialized to a per-process temp file in the
+    /// same directory first, then renamed to the target path.  This prevents readers
+    /// from ever observing a partial write, even if the process is interrupted.
     pub fn save_library(&self, library: &PresetLibrary) -> Result<(), StorageError> {
         let path = self.library_path(&library.device);
         if let Some(parent) = path.parent() {
@@ -225,9 +229,17 @@ impl Storage {
         }
         let content = serde_saphyr::to_string(library)
             .map_err(|e| StorageError::YamlSerialize(e.to_string()))?;
-        std::fs::write(&path, content).map_err(|e| StorageError::WriteFile {
-            path: path.display().to_string(),
+        let tmp = path.with_extension(format!("yaml.tmp.{}", std::process::id()));
+        std::fs::write(&tmp, &content).map_err(|e| StorageError::WriteFile {
+            path: tmp.display().to_string(),
             detail: e.to_string(),
+        })?;
+        std::fs::rename(&tmp, &path).map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            StorageError::WriteFile {
+                path: path.display().to_string(),
+                detail: e.to_string(),
+            }
         })
     }
 }
@@ -367,6 +379,39 @@ mod tests {
         // No override → XDG path, just verify slug still correct
         let path = storage.library_path("MG-30");
         assert!(path.to_string_lossy().ends_with("mg-30.yaml"));
+    }
+
+    #[test]
+    fn test_save_and_load_library_roundtrip() {
+        let tmp_dir = std::env::temp_dir().join(format!("nux_test_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+
+        let mut storage = Storage::new();
+        storage.apply_config(&Config {
+            last_device: None,
+            presets_dir: Some(tmp_dir.clone()),
+        });
+
+        let library = PresetLibrary {
+            version: PRESET_FILE_VERSION,
+            device: "MG-30".to_owned(),
+            presets: vec![sample_entry()],
+        };
+
+        storage
+            .save_library(&library)
+            .expect("save_library should succeed");
+
+        let expected_path = tmp_dir.join("mg-30.yaml");
+        assert!(
+            expected_path.exists(),
+            "library file should exist after save"
+        );
+
+        let loaded = storage.load_library("MG-30");
+        assert_eq!(loaded, library);
+
+        std::fs::remove_dir_all(&tmp_dir).ok();
     }
 
     #[test]

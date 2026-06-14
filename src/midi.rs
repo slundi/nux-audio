@@ -4,6 +4,17 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::sync::broadcast;
 
+// ── MidiSend trait ────────────────────────────────────────────────────────────
+
+/// Abstraction over MIDI send operations.
+///
+/// Implemented by [`MidiManager`] for real hardware and by [`MockMidi`] (test-only)
+/// so that command logic can be unit-tested without a physical device.
+pub trait MidiSend {
+    fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>>;
+    fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>>;
+}
+
 const DISPATCHER_CAPACITY: usize = 64;
 
 /// Async MIDI response dispatcher backed by a `tokio::sync::broadcast` channel.
@@ -268,5 +279,65 @@ impl MidiManager {
 impl Drop for MidiManager {
     fn drop(&mut self) {
         self.disconnect();
+    }
+}
+
+impl MidiSend for MidiManager {
+    fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+        self.send_sysex(data)
+    }
+
+    fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+        self.send_cc(control, value)
+    }
+}
+
+// ── MockMidi (test only) ──────────────────────────────────────────────────────
+
+/// In-memory MIDI sink for unit tests.
+///
+/// Records every outgoing message so tests can assert which bytes were sent.
+/// Set `should_fail = true` to simulate a connection error.
+#[cfg(test)]
+pub struct MockMidi {
+    /// Raw bytes of every message sent (CC: `[0xB0, ctrl, val]`;
+    /// SysEx: `[0xF0, 0x43, …data…, 0xF7]`).
+    pub sent: Vec<Vec<u8>>,
+    pub should_fail: bool,
+}
+
+#[cfg(test)]
+impl MockMidi {
+    pub fn new() -> Self {
+        Self {
+            sent: Vec::new(),
+            should_fail: false,
+        }
+    }
+}
+
+#[cfg(test)]
+impl MidiSend for MockMidi {
+    fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+        if self.should_fail {
+            return Err("mock send failure".into());
+        }
+        let mut msg = vec![SYSEX_START, 0x43];
+        msg.extend_from_slice(data);
+        msg.push(SYSEX_END);
+        self.sent.push(msg);
+        Ok(())
+    }
+
+    fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+        if self.should_fail {
+            return Err("mock send failure".into());
+        }
+        // NuxError::CcValueOutOfRange mirrors MidiManager::send_cc validation
+        if value > 127 {
+            return Err(crate::error::NuxError::CcValueOutOfRange(value).into());
+        }
+        self.sent.push(vec![0xB0, control, value]);
+        Ok(())
     }
 }
