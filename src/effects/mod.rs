@@ -1,4 +1,5 @@
 use crate::error::NuxError;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub mod amp;
@@ -11,6 +12,7 @@ pub mod gate;
 pub mod ir;
 pub mod modulation;
 pub mod reverb;
+pub mod user;
 pub mod volume;
 pub mod wah;
 
@@ -23,7 +25,7 @@ pub const CC_BYPASS_OFF: u8 = 0x00;
 ///
 /// GEN1 = firmware ≤ 4.x (218-byte detail response, original model set).
 /// GEN2 = firmware ≥ 5.x (222-byte detail response, expanded model set).
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, Serialize, Deserialize)]
 pub enum FirmwareGen {
     #[default]
     Gen1,
@@ -140,17 +142,17 @@ impl std::str::FromStr for EffectCategory {
     }
 }
 
-#[derive(Default, Clone, PartialEq, Debug)]
-pub struct EffectOption<'a> {
+#[derive(Default, Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub struct EffectOption {
     /// Model ID as transmitted in SysEx messages.
     /// IDs marked [confirmed] in effects.yaml are from hardware reverse-engineering.
     /// IDs marked [provisional] are inferred from sequential ordering.
     pub id: u8,
-    pub title: &'a str,
+    pub title: String,
     pub on_byte: u8,
     pub off_byte: u8,
     pub category_color: u32,
-    pub knobs: Vec<KnobDef<'a>>,
+    pub knobs: Vec<KnobDef>,
     pub dominant_color: Option<u32>,
     /// Minimum firmware generation required for this model.
     /// Defaults to `Gen1` (available on all hardware).
@@ -158,18 +160,18 @@ pub struct EffectOption<'a> {
 }
 
 #[derive(Default, Clone, PartialEq, Debug)]
-pub struct Effect<'a> {
+pub struct Effect {
     pub category: EffectCategory,
     pub start_off_byte: u8,
     pub start_on_byte: u8,
     pub category_color: u32,
-    pub options: Vec<EffectOption<'a>>,
+    pub options: Vec<EffectOption>,
 }
 
-#[derive(Default, Clone, PartialEq, Debug)]
-pub struct KnobDef<'a> {
-    pub id: &'a str,
-    pub title: &'a str,
+#[derive(Default, Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub struct KnobDef {
+    pub id: String,
+    pub title: String,
     pub range_start: Option<u8>, // Always 0
     pub range_end: Option<u8>,
     pub ctrl: u8,
@@ -183,7 +185,7 @@ pub struct KnobState {
 }
 
 /// Return the static model catalog for a category, or `None` for Vol/Sr.
-fn models_map(category: EffectCategory) -> Option<&'static HashMap<u8, EffectOption<'static>>> {
+fn models_map(category: EffectCategory) -> Option<&'static HashMap<u8, EffectOption>> {
     Some(match category {
         EffectCategory::Wah => &wah::MODELS,
         EffectCategory::Comp => &compression::MODELS,
@@ -207,9 +209,13 @@ pub fn get_model(
     category: EffectCategory,
     model_id: u8,
     fw_gen: FirmwareGen,
-) -> Option<&'static EffectOption<'static>> {
-    let opt = models_map(category)?.get(&model_id)?;
-    (opt.min_gen <= fw_gen).then_some(opt)
+) -> Option<&'static EffectOption> {
+    // built-in first
+    if let Some(opt) = models_map(category)?.get(&model_id) {
+        return (opt.min_gen <= fw_gen).then_some(opt);
+    }
+    // user extensions
+    user::get(category, model_id)
 }
 
 /// Parse a MG-30 `CURRENT_PRESET_BASIC` SysEx response into an `Effect`.
@@ -219,7 +225,7 @@ pub fn get_model(
 /// Byte offsets are provisional and must be verified against hardware captures:
 ///   `CATEGORY_OFFSET` — byte encoding the effect slot (maps to `EffectCategory`)
 ///   `MODEL_ID_OFFSET` — byte encoding the selected model within that slot
-pub fn extract_effects(response: &[u8], fw_gen: FirmwareGen) -> Result<Effect<'static>, NuxError> {
+pub fn extract_effects(response: &[u8], fw_gen: FirmwareGen) -> Result<Effect, NuxError> {
     // TODO: verify these offsets from hardware SysEx captures
     const CATEGORY_OFFSET: usize = 6;
     const MODEL_ID_OFFSET: usize = 7;
@@ -300,12 +306,18 @@ pub fn find_model_by_name(
     category: EffectCategory,
     name: &str,
     fw_gen: FirmwareGen,
-) -> Option<(u8, &'static EffectOption<'static>)> {
-    models_map(category)?
+) -> Option<(u8, &'static EffectOption)> {
+    // built-in first
+    if let Some(result) = models_map(category)?
         .iter()
         .filter(|(_, opt)| opt.min_gen <= fw_gen)
         .find(|(_, opt)| opt.title.eq_ignore_ascii_case(name))
         .map(|(k, v)| (*k, v))
+    {
+        return Some(result);
+    }
+    // user extensions
+    user::find_by_name(category, name, fw_gen)
 }
 
 /// Find the MIDI CC number for a knob by its `id` string within a category's model catalog.
@@ -381,7 +393,7 @@ mod tests {
         assert_eq!(FirmwareGen::from_version_str("v500"), FirmwareGen::Gen1);
         // without 'v' prefix
         assert_eq!(FirmwareGen::from_version_str("602"), FirmwareGen::Gen2);
-        // unparseable → conservative Gen1
+        // unparsable → conservative Gen1
         assert_eq!(FirmwareGen::from_version_str("invalid"), FirmwareGen::Gen1);
         assert_eq!(FirmwareGen::from_version_str(""), FirmwareGen::Gen1);
     }
@@ -475,11 +487,11 @@ mod tests {
 
     /// Knob CC numbers for each slot must fall within the slot's documented range.
     ///
-    /// Ranges from MIDI_CC_assignements.md:
+    /// Ranges from MIDI_CC_assignments.md:
     ///   Wah CC11–12 | Comp CC13–15,90 | Efx CC17–21 | Amp CC22–29
     ///   Eq CC30–41  | Gate CC42–45    | Mod CC46–51  | Delay CC52–59
     ///   Reverb CC60–63 | Ir CC64–69  | Vol CC70–72
-    fn assert_ccs_in_range(models: &HashMap<u8, EffectOption<'static>>, slot: &str, valid: &[u8]) {
+    fn assert_ccs_in_range(models: &HashMap<u8, EffectOption>, slot: &str, valid: &[u8]) {
         for (id, opt) in models {
             for knob in &opt.knobs {
                 assert!(

@@ -12,17 +12,17 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8, end: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(end),
         ctrl: cc,
     }
 }
 
-fn electric_knobs() -> Vec<KnobDef<'static>> {
+fn electric_knobs() -> Vec<KnobDef> {
     vec![
         knob("mic", "MIC", 64, 7), // DYN421/S57/U87/R122/R121/C414/C3000/B52
         knob("mic_axis", "MIC AXIS", 65, 2), // CENTER/MIDDLE/EDGE
@@ -32,7 +32,7 @@ fn electric_knobs() -> Vec<KnobDef<'static>> {
     ]
 }
 
-fn other_knobs() -> Vec<KnobDef<'static>> {
+fn other_knobs() -> Vec<KnobDef> {
     vec![
         knob("level", "LEVEL", 66, 100),
         knob("lo_cut", "LO CUT", 67, 100),
@@ -41,14 +41,14 @@ fn other_knobs() -> Vec<KnobDef<'static>> {
 }
 
 /// MG-30 IR/cabinet model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     // Electric guitar cabs
-    let mut map: HashMap<u8, EffectOption<'static>> = HashMap::from([
+    let mut map: HashMap<u8, EffectOption> = HashMap::from([
         (
             0x00,
             EffectOption {
                 id: 0x00,
-                title: "JZ 120",
+                title: "JZ 120".into(),
                 knobs: electric_knobs(),
                 ..Default::default()
             },
@@ -57,7 +57,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x01,
             EffectOption {
                 id: 0x01,
-                title: "DR112",
+                title: "DR112".into(),
                 knobs: electric_knobs(),
                 ..Default::default()
             },
@@ -66,7 +66,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x02,
             EffectOption {
                 id: 0x02,
-                title: "BS410",
+                title: "BS410".into(),
                 knobs: electric_knobs(),
                 ..Default::default()
             },
@@ -75,7 +75,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x03,
             EffectOption {
                 id: 0x03,
-                title: "A212",
+                title: "A212".into(),
                 knobs: electric_knobs(),
                 ..Default::default()
             },
@@ -84,7 +84,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x04,
             EffectOption {
                 id: 0x04,
-                title: "TR212",
+                title: "TR212".into(),
                 knobs: electric_knobs(),
                 ..Default::default()
             },
@@ -93,7 +93,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x05,
             EffectOption {
                 id: 0x05,
-                title: "1960",
+                title: "1960".into(),
                 knobs: electric_knobs(),
                 ..Default::default()
             },
@@ -102,7 +102,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x06,
             EffectOption {
                 id: 0x06,
-                title: "GB412",
+                title: "GB412".into(),
                 knobs: electric_knobs(),
                 ..Default::default()
             },
@@ -111,7 +111,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x07,
             EffectOption {
                 id: 0x07,
-                title: "V412",
+                title: "V412".into(),
                 knobs: electric_knobs(),
                 ..Default::default()
             },
@@ -124,7 +124,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x08,
             EffectOption {
                 id: 0x08,
-                title: "AGL DB810",
+                title: "AGL DB810".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -133,7 +133,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x09,
             EffectOption {
                 id: 0x09,
-                title: "AMP SV810",
+                title: "AMP SV810".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -142,7 +142,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x0A,
             EffectOption {
                 id: 0x0A,
-                title: "AMP SV410",
+                title: "AMP SV410".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -151,7 +151,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x0B,
             EffectOption {
                 id: 0x0B,
-                title: "AMP SV212",
+                title: "AMP SV212".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -160,7 +160,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x0C,
             EffectOption {
                 id: 0x0C,
-                title: "MKB 410",
+                title: "MKB 410".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -169,7 +169,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x0D,
             EffectOption {
                 id: 0x0D,
-                title: "TRC 410",
+                title: "TRC 410".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -178,7 +178,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x0E,
             EffectOption {
                 id: 0x0E,
-                title: "EDEN 410",
+                title: "EDEN 410".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -187,7 +187,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x0F,
             EffectOption {
                 id: 0x0F,
-                title: "Bassguy 410",
+                title: "Bassguy 410".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -200,7 +200,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x10,
             EffectOption {
                 id: 0x10,
-                title: "M-D45",
+                title: "M-D45".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -209,7 +209,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x11,
             EffectOption {
                 id: 0x11,
-                title: "G-HBird",
+                title: "G-HBird".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -218,7 +218,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x12,
             EffectOption {
                 id: 0x12,
-                title: "G-J15",
+                title: "G-J15".into(),
                 knobs: other_knobs(),
                 ..Default::default()
             },
@@ -230,7 +230,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
         0x13,
         EffectOption {
             id: 0x13,
-            title: "User IR",
+            title: "User IR".into(),
             knobs: other_knobs(),
             ..Default::default()
         },

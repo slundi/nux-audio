@@ -10,10 +10,10 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8, end: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(end),
         ctrl: cc,
@@ -21,13 +21,13 @@ fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'stat
 }
 
 /// MG-30 compressor model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     HashMap::from([
         (
             0x00,
             EffectOption {
                 id: 0x00,
-                title: "Rose Comp",
+                title: "Rose Comp".into(),
                 knobs: vec![
                     knob("sustain", "SUSTAIN", 13, 100),
                     knob("level", "LEVEL", 14, 100),
@@ -39,7 +39,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x01,
             EffectOption {
                 id: 0x01,
-                title: "K Comp",
+                title: "K Comp".into(),
                 knobs: vec![
                     knob("sustain", "SUSTAIN", 13, 100),
                     knob("level", "LEVEL", 14, 100),
@@ -52,7 +52,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x02,
             EffectOption {
                 id: 0x02,
-                title: "Studio Comp",
+                title: "Studio Comp".into(),
                 knobs: vec![
                     knob("threshold", "THRESHOLD", 13, 100),
                     knob("ratio", "RATIO", 14, 100),

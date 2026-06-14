@@ -46,7 +46,7 @@ pub async fn run(device_name: &Option<String>, category_str: &str, model_str: &s
         (id, None)
     } else {
         match find_model_by_name(category, model_str, session.fw_gen) {
-            Some((id, opt)) => (id, Some(opt.title)),
+            Some((id, opt)) => (id, Some(opt.title.clone())),
             None => {
                 eprintln!(
                     "Model '{model_str}' not found in {} catalog",

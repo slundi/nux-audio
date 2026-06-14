@@ -12,10 +12,10 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, FirmwareGen, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8, end: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(end),
         ctrl: cc,
@@ -23,13 +23,13 @@ fn knob(id: &'static str, title: &'static str, cc: u8, end: u8) -> KnobDef<'stat
 }
 
 /// MG-30 EFX model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     HashMap::from([
         (
             0x40,
             EffectOption {
                 id: 0x40,
-                title: "Dist+",
+                title: "Dist+".into(),
                 knobs: vec![
                     knob("output", "OUTPUT", 17, 100),
                     knob("sens", "SENSITIVITY", 18, 100),
@@ -41,7 +41,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x41,
             EffectOption {
                 id: 0x41,
-                title: "RC Boost",
+                title: "RC Boost".into(),
                 knobs: vec![
                     knob("gain", "GAIN", 17, 100),
                     knob("vol", "VOL", 18, 100),
@@ -55,7 +55,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x42,
             EffectOption {
                 id: 0x42,
-                title: "AC Boost",
+                title: "AC Boost".into(),
                 knobs: vec![
                     knob("gain", "GAIN", 17, 100),
                     knob("vol", "VOL", 18, 100),
@@ -69,7 +69,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x43,
             EffectOption {
                 id: 0x43,
-                title: "Dist One",
+                title: "Dist One".into(),
                 knobs: vec![
                     knob("level", "LEVEL", 17, 100),
                     knob("tone", "TONE", 18, 100),
@@ -82,7 +82,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x44,
             EffectOption {
                 id: 0x44,
-                title: "T Scream",
+                title: "T Scream".into(),
                 knobs: vec![
                     knob("drive", "DRIVE", 17, 100),
                     knob("tone", "TONE", 18, 100),
@@ -95,7 +95,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x45,
             EffectOption {
                 id: 0x45,
-                title: "Blues Drv",
+                title: "Blues Drv".into(),
                 knobs: vec![
                     knob("level", "LEVEL", 17, 100),
                     knob("tone", "TONE", 18, 100),
@@ -108,7 +108,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x46,
             EffectOption {
                 id: 0x46,
-                title: "Morning Drv",
+                title: "Morning Drv".into(),
                 knobs: vec![
                     knob("volume", "VOLUME", 17, 100),
                     knob("drive", "DRIVE", 18, 100),
@@ -121,7 +121,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x47,
             EffectOption {
                 id: 0x47,
-                title: "EAT Dist",
+                title: "EAT Dist".into(),
                 knobs: vec![
                     knob("distortion", "DISTORTION", 17, 100),
                     knob("filter", "FILTER", 18, 100),
@@ -134,7 +134,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x48,
             EffectOption {
                 id: 0x48,
-                title: "Red Dirt",
+                title: "Red Dirt".into(),
                 knobs: vec![
                     knob("drive", "DRIVE", 17, 100),
                     knob("tone", "TONE", 18, 100),
@@ -147,7 +147,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x49,
             EffectOption {
                 id: 0x49,
-                title: "Crunch",
+                title: "Crunch".into(),
                 knobs: vec![
                     knob("volume", "VOLUME", 17, 100),
                     knob("tone", "TONE", 18, 100),
@@ -160,7 +160,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x4A,
             EffectOption {
                 id: 0x4A,
-                title: "Muff Fuzz",
+                title: "Muff Fuzz".into(),
                 knobs: vec![
                     knob("volume", "VOLUME", 17, 100),
                     knob("tone", "TONE", 18, 100),
@@ -173,7 +173,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x4B,
             EffectOption {
                 id: 0x4B,
-                title: "Katana",
+                title: "Katana".into(),
                 knobs: vec![
                     knob("boost_sw", "BOOST SW", 17, 1),
                     knob("volume", "VOLUME", 18, 100),
@@ -185,7 +185,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x4C,
             EffectOption {
                 id: 0x4C,
-                title: "Red Fuzz",
+                title: "Red Fuzz".into(),
                 // Silicon fuzz — knob labels provisional, CCs confirmed (EFX slot CC17–19)
                 knobs: vec![
                     knob("volume", "VOLUME", 17, 100),
@@ -199,7 +199,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x4D,
             EffectOption {
                 id: 0x4D,
-                title: "Touch Wah",
+                title: "Touch Wah".into(),
                 // Envelope auto-wah — knob labels provisional, CCs confirmed (EFX slot CC17–19)
                 knobs: vec![
                     knob("sens", "SENSITIVITY", 17, 100),
@@ -213,7 +213,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x4E,
             EffectOption {
                 id: 0x4E,
-                title: "Full-OD HP",
+                title: "Full-OD HP".into(),
                 min_gen: FirmwareGen::Gen2,
                 // ID provisional — knob order from device UI
                 knobs: vec![
@@ -228,7 +228,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x4F,
             EffectOption {
                 id: 0x4F,
-                title: "Horseman OD",
+                title: "Horseman OD".into(),
                 min_gen: FirmwareGen::Gen2,
                 // ID provisional — knob order from device UI
                 knobs: vec![
@@ -243,7 +243,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x50,
             EffectOption {
                 id: 0x50,
-                title: "Nob ODR",
+                title: "Nob ODR".into(),
                 min_gen: FirmwareGen::Gen2,
                 // ID provisional — knob order from device UI
                 knobs: vec![
@@ -258,7 +258,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x51,
             EffectOption {
                 id: 0x51,
-                title: "Riv Bluefog",
+                title: "Riv Bluefog".into(),
                 min_gen: FirmwareGen::Gen2,
                 // ID provisional — knob order from device UI
                 knobs: vec![
@@ -273,7 +273,7 @@ pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(
             0x52,
             EffectOption {
                 id: 0x52,
-                title: "Turbo OD",
+                title: "Turbo OD".into(),
                 min_gen: FirmwareGen::Gen2,
                 // ID provisional — knob order from device UI
                 knobs: vec![

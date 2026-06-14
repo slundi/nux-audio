@@ -80,7 +80,7 @@ impl PresetFile {
     /// Convert a parsed [`Preset`] into an exportable [`PresetFile`].
     ///
     /// `device` is the model code (e.g. `"MG-30"`) from the device registry.
-    pub fn from_preset(preset: &Preset<'_>, device: &str) -> Self {
+    pub fn from_preset(preset: &Preset, device: &str) -> Self {
         let slot = Preset::format_code(preset.number);
 
         let effect_order = preset
@@ -97,13 +97,13 @@ impl PresetFile {
             .map(|(cat, opt)| EffectSlotFile {
                 category: cat.as_str().to_owned(),
                 model_id: opt.id,
-                model_name: opt.title.to_owned(),
+                model_name: opt.title.clone(),
                 knobs: opt
                     .knobs
                     .iter()
                     .map(|k| KnobFile {
-                        id: k.id.to_owned(),
-                        title: k.title.to_owned(),
+                        id: k.id.clone(),
+                        title: k.title.clone(),
                         ctrl: k.ctrl,
                         range_end: k.range_end,
                     })
@@ -185,20 +185,20 @@ mod tests {
     use crate::preset::{Preset, SceneSnapshot};
     use std::collections::HashMap;
 
-    fn sample_preset() -> Preset<'static> {
+    fn sample_preset() -> Preset {
         let mut effects = HashMap::new();
         effects.insert(
             EffectCategory::Amp,
             EffectOption {
                 id: 3,
-                title: "Modern",
+                title: "Modern".into(),
                 on_byte: 0x01,
                 off_byte: 0x00,
                 category_color: 0xFF5500,
                 dominant_color: None,
                 knobs: vec![KnobDef {
-                    id: "gain",
-                    title: "Gain",
+                    id: "gain".into(),
+                    title: "Gain".into(),
                     ctrl: 22,
                     range_start: Some(0),
                     range_end: Some(127),

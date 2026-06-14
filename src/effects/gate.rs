@@ -10,10 +10,10 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use super::{EffectOption, KnobDef};
 
-fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
+fn knob(id: &str, title: &str, cc: u8) -> KnobDef {
     KnobDef {
-        id,
-        title,
+        id: id.to_owned(),
+        title: title.to_owned(),
         range_start: Some(0),
         range_end: Some(100),
         ctrl: cc,
@@ -21,12 +21,12 @@ fn knob(id: &'static str, title: &'static str, cc: u8) -> KnobDef<'static> {
 }
 
 /// MG-30 gate model catalog, keyed by model ID.
-pub static MODELS: LazyLock<HashMap<u8, EffectOption<'static>>> = LazyLock::new(|| {
+pub static MODELS: LazyLock<HashMap<u8, EffectOption>> = LazyLock::new(|| {
     HashMap::from([(
         0x00,
         EffectOption {
             id: 0x00,
-            title: "Noise Gate",
+            title: "Noise Gate".into(),
             knobs: vec![knob("sens", "SENSITIVITY", 42), knob("decay", "DECAY", 43)],
             ..Default::default()
         },
