@@ -17,7 +17,7 @@ pub const SPINNER_FRAMES: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟",
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Tab {
     #[default]
     Presets = 0,
@@ -27,12 +27,13 @@ pub enum Tab {
 
 // ── Overlay ───────────────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Overlay {
     DevicePicker,
     Looper,
     Drum,
     Conflict,
+    Help,
 }
 
 // ── Conflict state ────────────────────────────────────────────────────────────

@@ -26,4 +26,46 @@ This project is in early stage, so don't expect to manage tour device yet. But, 
 # Display CLI help
 nux-cli --help
 nux-cli -h
+
+# Launch the interactive TUI
+nux-cli tui
 ```
+
+## TUI Key Bindings
+
+Press `?` inside the TUI to open the in-app help overlay.
+
+### Global
+
+| Key | Action |
+|-----|--------|
+| `F1` / `F2` / `F3` | Switch tabs (Presets / Live Board / About) |
+| `d` | Open device picker |
+| `l` | Open looper overlay |
+| `D` | Open drum machine overlay |
+| `?` | Open this help overlay |
+| `q` | Quit |
+
+### Presets tab
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` or `↑` / `↓` | Move preset selection |
+| `Enter` | Toggle chain panel focus |
+| `Tab` | Cycle scene A → B → C |
+| `g` | Pull current preset from device |
+| `s` | Send selected preset to device |
+
+### Live Board tab
+
+| Key | Action |
+|-----|--------|
+| `h` / `l` or `←` / `→` | Move chain slot focus |
+| `Tab` | Cycle scene A → B → C |
+
+### Overlays
+
+| Key | Action |
+|-----|--------|
+| `Esc` | Close any overlay |
+| `o` / `n` / `r` | Conflict dialog: Override / No / Rename |

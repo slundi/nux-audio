@@ -1,0 +1,27 @@
+[package]
+name = "nux-audio-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nux-audio = { path = ".." }
+
+# Prevent this from being included in a normal workspace build.
+[workspace]
+
+[[bin]]
+name = "fuzz_preset_detail"
+path = "fuzz_targets/fuzz_preset_detail.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_extract_name"
+path = "fuzz_targets/fuzz_extract_name.rs"
+test = false
+doc = false

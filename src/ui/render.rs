@@ -11,8 +11,8 @@ use ratatui::{
 use super::app::App;
 use super::state::{ICON_OFFLINE, ICON_ONLINE, OperationStatus, Overlay, SPINNER_FRAMES, Tab};
 use super::{
-    overlay_conflict, overlay_device, overlay_drum, overlay_looper, tab_about, tab_liveboard,
-    tab_presets,
+    overlay_conflict, overlay_device, overlay_drum, overlay_help, overlay_looper, tab_about,
+    tab_liveboard, tab_presets,
 };
 
 pub fn render(frame: &mut Frame, app: &App) {
@@ -40,6 +40,7 @@ pub fn render(frame: &mut Frame, app: &App) {
             Overlay::Looper => overlay_looper::render(frame, frame.area(), app),
             Overlay::Drum => overlay_drum::render(frame, frame.area(), app),
             Overlay::Conflict => overlay_conflict::render(frame, frame.area(), app),
+            Overlay::Help => overlay_help::render(frame, frame.area(), app),
         }
     }
 }

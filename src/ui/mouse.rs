@@ -227,6 +227,7 @@ impl App {
                 }
             }
             Overlay::Looper => {} // Transport buttons: keyboard preferred.
+            Overlay::Help => {}   // No mouse interactions in help.
         }
     }
 
@@ -257,6 +258,7 @@ impl App {
                 }
             }
             Overlay::Conflict => {}
+            Overlay::Help => {}
         }
     }
 }

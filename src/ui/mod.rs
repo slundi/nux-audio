@@ -11,6 +11,7 @@ mod mouse;
 mod overlay_conflict;
 mod overlay_device;
 mod overlay_drum;
+mod overlay_help;
 mod overlay_looper;
 mod render;
 mod state;

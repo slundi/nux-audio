@@ -17,6 +17,7 @@ use ratatui::{Terminal, backend::CrosstermBackend, layout::Rect};
 
 use crate::storage::{Config, LibraryEntry, PresetLibrary, Storage};
 
+use super::action::GlobalAction;
 use super::render::render;
 use super::state::{
     ConflictState, DRUM_PATTERNS, DeviceInfo, DevicePickerState, DrumState, LooperState,
@@ -116,6 +117,20 @@ impl App {
         self.active_overlay = Some(overlay);
     }
 
+    // ── Action dispatch ───────────────────────────────────────────────────────
+
+    /// Execute a logical action, decoupled from the physical key that triggered it.
+    pub fn handle_action(&mut self, action: GlobalAction) {
+        match action {
+            GlobalAction::Quit => self.should_quit = true,
+            GlobalAction::ChangeDevice => self.open_overlay(Overlay::DevicePicker),
+            GlobalAction::Help => self.open_overlay(Overlay::Help),
+            GlobalAction::GetPreset => self.action_get_from_device(),
+            GlobalAction::SendPreset => self.action_send_to_device(),
+            _ => {}
+        }
+    }
+
     // ── Key handling ──────────────────────────────────────────────────────────
 
     pub fn handle_key(&mut self, key: event::KeyEvent) {
@@ -129,7 +144,11 @@ impl App {
         if key.modifiers == KeyModifiers::NONE {
             match key.code {
                 KeyCode::Char('q') => {
-                    self.should_quit = true;
+                    self.handle_action(GlobalAction::Quit);
+                    return;
+                }
+                KeyCode::Char('?') => {
+                    self.handle_action(GlobalAction::Help);
                     return;
                 }
                 KeyCode::F(1) => {
@@ -145,7 +164,7 @@ impl App {
                     return;
                 }
                 KeyCode::Char('d') => {
-                    self.open_overlay(Overlay::DevicePicker);
+                    self.handle_action(GlobalAction::ChangeDevice);
                     return;
                 }
                 KeyCode::Char('l') => {
@@ -179,6 +198,7 @@ impl App {
             Overlay::Looper => self.handle_looper_key(key),
             Overlay::Drum => self.handle_drum_key(key),
             Overlay::Conflict => self.handle_conflict_key(key),
+            Overlay::Help => {} // Esc (above) is the only key needed
         }
     }
 
@@ -292,10 +312,10 @@ impl App {
                 self.active_scene = (self.active_scene + 1) % 3;
             }
             KeyCode::Char('g') if !self.chain_panel_active => {
-                self.action_get_from_device();
+                self.handle_action(GlobalAction::GetPreset);
             }
             KeyCode::Char('s') if !self.chain_panel_active => {
-                self.action_send_to_device();
+                self.handle_action(GlobalAction::SendPreset);
             }
             KeyCode::Up | KeyCode::Char('k') if !self.chain_panel_active => {
                 self.preset_selected = self.preset_selected.saturating_sub(1);
@@ -476,6 +496,95 @@ pub fn run_tui() -> io::Result<()> {
     terminal.show_cursor()?;
 
     result
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+
+    use super::*;
+
+    fn make_key(code: KeyCode) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }
+    }
+
+    #[test]
+    fn test_action_quit() {
+        let mut app = App::new();
+        assert!(!app.should_quit);
+        app.handle_action(GlobalAction::Quit);
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn test_action_help_opens_overlay() {
+        let mut app = App::new();
+        assert!(app.active_overlay.is_none());
+        app.handle_action(GlobalAction::Help);
+        assert_eq!(app.active_overlay, Some(Overlay::Help));
+    }
+
+    #[test]
+    fn test_action_get_preset_offline_sets_status() {
+        let mut app = App::new();
+        app.operation_status = OperationStatus::Offline;
+        assert!(app.status_message.is_none());
+        app.handle_action(GlobalAction::GetPreset);
+        assert!(app.status_message.is_some());
+    }
+
+    #[test]
+    fn test_action_send_preset_offline_sets_status() {
+        let mut app = App::new();
+        app.operation_status = OperationStatus::Offline;
+        assert!(app.status_message.is_none());
+        app.handle_action(GlobalAction::SendPreset);
+        assert!(app.status_message.is_some());
+    }
+
+    #[test]
+    fn test_handle_key_q_quits() {
+        let mut app = App::new();
+        app.handle_key(make_key(KeyCode::Char('q')));
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn test_handle_key_question_mark_opens_help() {
+        let mut app = App::new();
+        app.handle_key(make_key(KeyCode::Char('?')));
+        assert_eq!(app.active_overlay, Some(Overlay::Help));
+    }
+
+    #[test]
+    fn test_handle_key_esc_closes_help_overlay() {
+        let mut app = App::new();
+        app.active_overlay = Some(Overlay::Help);
+        app.handle_key(make_key(KeyCode::Esc));
+        assert!(app.active_overlay.is_none());
+    }
+
+    #[test]
+    fn test_handle_key_f1_switches_tab() {
+        let mut app = App::new();
+        app.active_tab = Tab::About;
+        app.handle_key(make_key(KeyCode::F(1)));
+        assert_eq!(app.active_tab, Tab::Presets);
+    }
+
+    #[test]
+    fn test_handle_key_f2_switches_tab() {
+        let mut app = App::new();
+        app.handle_key(make_key(KeyCode::F(2)));
+        assert_eq!(app.active_tab, Tab::LiveBoard);
+    }
 }
 
 fn run_event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
