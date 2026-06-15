@@ -1,4 +1,3 @@
-use clap::Parser;
 use std::fs::OpenOptions;
 
 pub mod cli;
@@ -41,7 +40,7 @@ pub fn configure_logger(xdg: &xdg::BaseDirectories) {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().len() > 1 {
-        let cli = cli::Cli::parse();
+        let cli = cli::cli_parser().run();
         cli.process().await;
         return Ok(());
     }

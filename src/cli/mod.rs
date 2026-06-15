@@ -13,12 +13,13 @@ use crate::device::{Device, extract_version};
 use crate::effects::FirmwareGen;
 use crate::export::OutputFormat;
 use crate::midi::{MidiDispatcher, MidiManager};
-use clap::{Parser, Subcommand};
+use bpaf::*;
 use command_bypass::parse_bypass_state;
 use command_devices::list as list_devices;
 use command_effect::parse_effect_parameters;
 use nux_audio::nux_sys_ex_commands::DEVICE_VERSION_REQUEST;
 use nux_audio::string::{decimal_string_to_vec_u8, hex_string_to_vec_u8};
+use std::path::PathBuf;
 use std::time::Duration;
 
 // Re-export types that appear in the public Commands enum or tests
@@ -26,40 +27,17 @@ pub use command_bypass::BypassState;
 pub use command_effect::{EffectParameter, KnobIdentifier, parse_effect_params_from_string};
 pub use command_preset::{GetPresetArgs, PresetAction, SendPresetArgs};
 
-#[derive(Parser)]
-#[command(name = "nux-audio")]
-#[command(version = "0.1.0")]
-#[command(about = "Guitar multi-effects manager via MIDI")]
-#[command(long_about = None)]
+#[derive(Clone)]
 pub struct Cli {
-    /// Device name to use
-    #[arg(short = 'd', long = "device", global = true)]
     pub device_name: Option<String>,
-
-    /// MIDI port to use (alternative to device name)
-    #[arg(short = 'p', long = "port", global = true)]
     pub midi_port: Option<usize>,
-
-    /// Output preset data as YAML (default)
-    #[arg(long, global = true, conflicts_with = "json")]
-    pub yaml: bool,
-
-    /// Output preset data as JSON
-    #[arg(long, global = true, conflicts_with = "yaml")]
-    pub json: bool,
-
-    #[command(subcommand)]
+    format: OutputFormat,
     pub command: Commands,
 }
 
 impl Cli {
-    /// Resolve the output format from `--json` / `--yaml` flags. Defaults to YAML.
     pub fn output_format(&self) -> OutputFormat {
-        if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Yaml
-        }
+        self.format
     }
 
     pub async fn process(self) {
@@ -127,82 +105,219 @@ impl Cli {
     }
 }
 
-#[derive(Subcommand)]
+#[derive(Clone)]
 pub enum Commands {
-    /// List available MIDI devices
     Devices,
-
-    /// Display connected device information
     Info,
-
-    /// Preset management
     Preset {
-        #[command(subcommand)]
         action: PresetAction,
     },
-
-    /// Effect control — set knob values via MIDI CC
-    ///
-    /// Example: nux effect amp gain=80 tone=50
-    ///          nux effect delay 52=64
     Effect {
-        /// Effect slot name (wah, amp, reverb, …)
         effect: String,
-
-        /// Knob settings in "knob=value" format
-        /// Example: "gain=80,tone=50" or "22=80"
-        #[arg(value_parser = parse_effect_parameters)]
         parameters: Vec<EffectParameter>,
     },
-
-    /// Switch the active model within an effect slot
-    ///
-    /// The model can be a hex ID (0x45), decimal ID (69), or model name ("Tweed 1x8").
-    ///
-    /// Example: nux model amp 0x45
-    ///          nux model reverb "Hall"
-    Model {
-        /// Effect slot name (wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir)
-        category: String,
-
-        /// Model to activate: hex ID (0x45), decimal ID (69), or model name ("Hall")
-        model: String,
-    },
-
-    /// Toggle the bypass state of an effect slot
-    ///
-    /// Example: nux bypass amp on
-    ///          nux bypass reverb off
     Bypass {
-        /// Effect slot name (wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir)
         category: String,
-
-        /// Desired state: "on" to activate, "off" to bypass
-        #[arg(value_parser = parse_bypass_state)]
         state: BypassState,
     },
-
-    /// Listen for incoming MIDI/SysEx messages (useful for reverse engineering)
+    Model {
+        category: String,
+        model: String,
+    },
     Listen,
-
-    /// Launch the interactive TUI
     Tui,
-
-    /// Send raw SysEx data (start and end bytes are added automatically)
-    ///
-    /// WARNING: bypasses all safety checks — use only for debugging/reverse-engineering.
     Raw {
-        /// Hex or decimal byte sequence
         data: Vec<String>,
-
-        /// Parse data as decimal instead of hex
-        #[arg(long)]
         decimal: bool,
-
-        /// Include custom device-ID prefix bytes
-        #[arg(long)]
         with_prefixes: bool,
     },
+}
+
+// ── Parser functions ──────────────────────────────────────────────────────────
+
+fn device_name_parser() -> impl Parser<Option<String>> {
+    short('d')
+        .long("device")
+        .help("Device name to use")
+        .argument::<String>("DEVICE")
+        .optional()
+}
+
+fn midi_port_parser() -> impl Parser<Option<usize>> {
+    short('p')
+        .long("port")
+        .help("MIDI port to use (alternative to device name)")
+        .argument::<usize>("PORT")
+        .optional()
+}
+
+fn output_format_parser() -> impl Parser<OutputFormat> {
+    let yaml = long("yaml")
+        .help("Output preset data as YAML (default)")
+        .req_flag(OutputFormat::Yaml);
+    let json = long("json")
+        .help("Output preset data as JSON")
+        .req_flag(OutputFormat::Json);
+    construct!([yaml, json]).fallback(OutputFormat::Yaml)
+}
+
+fn cmd_devices() -> impl Parser<Commands> {
+    pure(Commands::Devices)
+        .to_options()
+        .descr("List available MIDI devices")
+        .command("devices")
+}
+
+fn cmd_info() -> impl Parser<Commands> {
+    pure(Commands::Info)
+        .to_options()
+        .descr("Display connected device information")
+        .command("info")
+}
+
+fn cmd_listen() -> impl Parser<Commands> {
+    pure(Commands::Listen)
+        .to_options()
+        .descr("Listen for incoming MIDI/SysEx messages (useful for reverse engineering)")
+        .command("listen")
+}
+
+fn cmd_tui() -> impl Parser<Commands> {
+    pure(Commands::Tui)
+        .to_options()
+        .descr("Launch the interactive TUI")
+        .command("tui")
+}
+
+fn bypass_state_bpaf() -> impl Parser<BypassState> {
+    positional::<String>("STATE")
+        .help("Desired state: 'on' to activate, 'off' to bypass")
+        .parse(|s| parse_bypass_state(&s))
+}
+
+fn cmd_bypass() -> impl Parser<Commands> {
+    let category = positional::<String>("CATEGORY")
+        .help("Effect slot name (wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir)");
+    let state = bypass_state_bpaf();
+    construct!(Commands::Bypass { category, state })
+        .to_options()
+        .descr("Toggle the bypass state of an effect slot")
+        .command("bypass")
+}
+
+fn effect_parameter_bpaf() -> impl Parser<EffectParameter> {
+    positional::<String>("KNOB=VALUE").parse(|s| parse_effect_parameters(&s))
+}
+
+fn cmd_effect() -> impl Parser<Commands> {
+    let effect = positional::<String>("EFFECT").help("Effect slot name (wah, amp, reverb, …)");
+    let parameters = effect_parameter_bpaf().many();
+    construct!(Commands::Effect { effect, parameters })
+        .to_options()
+        .descr("Effect control — set knob values via MIDI CC\n\nExample: nux effect amp gain=80 tone=50")
+        .command("effect")
+}
+
+fn cmd_model() -> impl Parser<Commands> {
+    let category = positional::<String>("CATEGORY")
+        .help("Effect slot name (wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir)");
+    let model = positional::<String>("MODEL")
+        .help("Model to activate: hex ID (0x45), decimal ID (69), or model name (\"Hall\")");
+    construct!(Commands::Model { category, model })
+        .to_options()
+        .descr("Switch the active model within an effect slot")
+        .command("model")
+}
+
+fn cmd_preset_show() -> impl Parser<PresetAction> {
+    pure(PresetAction::Show)
+        .to_options()
+        .descr("Display current preset details")
+        .command("show")
+}
+
+fn cmd_preset_get() -> impl Parser<PresetAction> {
+    let slot = short('s')
+        .long("slot")
+        .help("Preset slot/location to retrieve from")
+        .argument::<u8>("SLOT")
+        .optional();
+    let filename = positional::<PathBuf>("FILE")
+        .help("Output file (optional, otherwise display to console)")
+        .optional();
+    construct!(GetPresetArgs { slot, filename })
+        .map(PresetAction::Get)
+        .to_options()
+        .descr("Get preset from device")
+        .command("get")
+}
+
+fn cmd_preset_send() -> impl Parser<PresetAction> {
+    let slot = short('s')
+        .long("slot")
+        .help("Destination preset slot/location")
+        .argument::<u8>("SLOT")
+        .optional();
+    let filename = positional::<PathBuf>("FILE").help("Preset file to send");
+    construct!(SendPresetArgs { slot, filename })
+        .map(PresetAction::Send)
+        .to_options()
+        .descr("Send preset to device")
+        .command("send")
+}
+
+fn cmd_preset() -> impl Parser<Commands> {
+    let action = construct!([cmd_preset_show(), cmd_preset_get(), cmd_preset_send()]);
+    construct!(Commands::Preset { action })
+        .to_options()
+        .descr("Preset management")
+        .command("preset")
+}
+
+fn cmd_raw() -> impl Parser<Commands> {
+    let data = positional::<String>("DATA")
+        .help("Hex or decimal byte sequence")
+        .many();
+    let decimal = long("decimal")
+        .help("Parse data as decimal instead of hex")
+        .switch();
+    let with_prefixes = long("with-prefixes")
+        .help("Include custom device-ID prefix bytes")
+        .switch();
+    construct!(Commands::Raw {
+        data,
+        decimal,
+        with_prefixes,
+    })
+    .to_options()
+    .descr("Send raw SysEx data (start and end bytes are added automatically)\n\nWARNING: bypasses all safety checks — use only for debugging/reverse-engineering.")
+    .command("raw")
+}
+
+pub fn cli_parser() -> OptionParser<Cli> {
+    let device_name = device_name_parser();
+    let midi_port = midi_port_parser();
+    let format = output_format_parser();
+    let command = construct!([
+        cmd_devices(),
+        cmd_info(),
+        cmd_preset(),
+        cmd_effect(),
+        cmd_bypass(),
+        cmd_model(),
+        cmd_listen(),
+        cmd_tui(),
+        cmd_raw(),
+    ]);
+    construct!(Cli {
+        device_name,
+        midi_port,
+        format,
+        command,
+    })
+    .to_options()
+    .version(env!("CARGO_PKG_VERSION"))
+    .descr("Guitar multi-effects manager via MIDI")
 }
 
 const VERSION_HEADER: [u8; 4] = [0xF0, 0x43, 0x58, 0x10];
@@ -382,28 +497,28 @@ fn send_raw(data: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::Parser;
     use std::path::PathBuf;
 
     #[test]
     fn test_devices_command() {
-        let args = ["guitar-fx", "devices"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser().run_inner(Args::from(&["devices"])).unwrap();
         assert!(matches!(cli.command, Commands::Devices));
     }
 
     #[test]
     fn test_info_with_device() {
-        let args = ["guitar-fx", "-d", "MG30", "info"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["-d", "MG30", "info"]))
+            .unwrap();
         assert_eq!(cli.device_name, Some("MG30".to_string()));
         assert!(matches!(cli.command, Commands::Info));
     }
 
     #[test]
     fn test_preset_get() {
-        let args = ["guitar-fx", "preset", "get", "-s", "3", "my_preset.json"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["preset", "get", "-s", "3", "my_preset.json"]))
+            .unwrap();
         if let Commands::Preset {
             action: PresetAction::Get(get_args),
         } = cli.command
@@ -417,8 +532,9 @@ mod tests {
 
     #[test]
     fn test_preset_send() {
-        let args = ["guitar-fx", "preset", "send", "preset.json"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["preset", "send", "preset.json"]))
+            .unwrap();
         if let Commands::Preset {
             action: PresetAction::Send(send_args),
         } = cli.command
@@ -432,8 +548,9 @@ mod tests {
 
     #[test]
     fn test_effect_with_numeric_params() {
-        let args = ["guitar-fx", "effect", "distortion", "1=80", "2=50"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["effect", "distortion", "1=80", "2=50"]))
+            .unwrap();
         if let Commands::Effect { effect, parameters } = cli.command {
             assert_eq!(effect, "distortion");
             assert_eq!(parameters.len(), 2);
@@ -448,8 +565,9 @@ mod tests {
 
     #[test]
     fn test_effect_with_named_params() {
-        let args = ["guitar-fx", "effect", "reverb", "gain=75", "tone=60"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["effect", "reverb", "gain=75", "tone=60"]))
+            .unwrap();
         if let Commands::Effect { effect, parameters } = cli.command {
             assert_eq!(effect, "reverb");
             assert_eq!(parameters.len(), 2);
@@ -466,8 +584,9 @@ mod tests {
 
     #[test]
     fn test_model_command_hex_id() {
-        let args = ["guitar-fx", "model", "amp", "0x45"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["model", "amp", "0x45"]))
+            .unwrap();
         if let Commands::Model { category, model } = cli.command {
             assert_eq!(category, "amp");
             assert_eq!(model, "0x45");
@@ -478,8 +597,9 @@ mod tests {
 
     #[test]
     fn test_model_command_name() {
-        let args = ["guitar-fx", "model", "reverb", "Hall"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["model", "reverb", "Hall"]))
+            .unwrap();
         if let Commands::Model { category, model } = cli.command {
             assert_eq!(category, "reverb");
             assert_eq!(model, "Hall");
@@ -490,8 +610,9 @@ mod tests {
 
     #[test]
     fn test_model_command_decimal_id() {
-        let args = ["guitar-fx", "model", "delay", "69"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["model", "delay", "69"]))
+            .unwrap();
         if let Commands::Model { category, model } = cli.command {
             assert_eq!(category, "delay");
             assert_eq!(model, "69");
@@ -502,8 +623,9 @@ mod tests {
 
     #[test]
     fn test_bypass_on_command() {
-        let args = ["guitar-fx", "bypass", "amp", "on"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["bypass", "amp", "on"]))
+            .unwrap();
         if let Commands::Bypass { category, state } = cli.command {
             assert_eq!(category, "amp");
             assert_eq!(state, BypassState::On);
@@ -514,15 +636,15 @@ mod tests {
 
     #[test]
     fn test_listen_command() {
-        let args = ["guitar-fx", "listen"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser().run_inner(Args::from(&["listen"])).unwrap();
         assert!(matches!(cli.command, Commands::Listen));
     }
 
     #[test]
     fn test_bypass_off_command() {
-        let args = ["guitar-fx", "bypass", "reverb", "off"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = cli_parser()
+            .run_inner(Args::from(&["bypass", "reverb", "off"]))
+            .unwrap();
         if let Commands::Bypass { category, state } = cli.command {
             assert_eq!(category, "reverb");
             assert_eq!(state, BypassState::Off);

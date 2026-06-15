@@ -13,7 +13,7 @@ pub enum BypassState {
     Off,
 }
 
-/// Parse `"on"` / `"off"` (and common aliases) for use as a clap `value_parser`.
+/// Parse `"on"` / `"off"` (and common aliases) for the bypass state positional argument.
 pub fn parse_bypass_state(s: &str) -> Result<BypassState, String> {
     match s.to_lowercase().as_str() {
         "on" | "1" | "true" | "enable" => Ok(BypassState::On),

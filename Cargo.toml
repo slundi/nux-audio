@@ -12,7 +12,7 @@ repository = "https://codeberg.org/slundi/nux-audio"
 [features]
 
 [dependencies]
-clap = { version = "4.6", features = ["derive", "cargo"] }
+bpaf = "0.9"
 midir = "0.11"
 log = "0.4"                                                # flexi_logger = "0.31" ?
 humantime = "2.3"

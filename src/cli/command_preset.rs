@@ -2,7 +2,6 @@
 
 use crate::export::OutputFormat;
 use crate::preset::Preset;
-use clap::{Args, Subcommand};
 use nux_audio::nux_sys_ex_commands::{CURRENT_PRESET_BASIC, mg30_request_preset};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -11,35 +10,22 @@ const BASIC_HEADER: [u8; 6] = [0xF0, 0x43, 0x58, 0x70, 0x15, 0x02];
 const DETAIL_HEADER: [u8; 6] = [0xF0, 0x43, 0x58, 0x70, 0x0B, 0x02];
 const TIMEOUT: Duration = Duration::from_secs(3);
 
-#[derive(Subcommand)]
+#[derive(Clone)]
 pub enum PresetAction {
-    /// Display current preset details
     Show,
-
-    /// Get preset from device
     Get(GetPresetArgs),
-
-    /// Send preset to device
     Send(SendPresetArgs),
 }
 
-#[derive(Args)]
+#[derive(Clone)]
 pub struct GetPresetArgs {
-    /// Preset slot/location to retrieve from
-    #[arg(short = 's', long = "slot")]
     pub slot: Option<u8>,
-
-    /// Output file (optional, otherwise display to console)
     pub filename: Option<PathBuf>,
 }
 
-#[derive(Args)]
+#[derive(Clone)]
 pub struct SendPresetArgs {
-    /// Destination preset slot/location
-    #[arg(short = 's', long = "slot")]
     pub slot: Option<u8>,
-
-    /// Preset file to send
     pub filename: PathBuf,
 }
 

@@ -393,7 +393,7 @@ impl App {
     /// Pull the current preset from the connected device into the local library.
     ///
     /// If a local entry already exists for the same device slot, the conflict
-    /// overlay is opened to let the user choose [O]verride / [N]o / [R]ename.
+    /// overlay is opened to let the user choose Override (`o`) / No (`n`) / Rename (`r`).
     fn action_get_from_device(&mut self) {
         if self.operation_status != OperationStatus::Online {
             self.set_status("Not connected — press d to select a device");
