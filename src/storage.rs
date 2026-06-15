@@ -1,7 +1,7 @@
 //! Local preset library and application configuration persistence.
 //!
 //! Two XDG-compliant files are managed:
-//! - Config:         `~/.config/nux-audio/config.toml`
+//! - Config:         `~/.config/nux-audio/config.yaml`
 //! - Preset library: `~/.local/share/nux-audio/presets/<device-slug>.yaml`
 //!   One file per device model (e.g. `mg-30.yaml`).
 
@@ -24,16 +24,13 @@ pub enum StorageError {
     #[error("cannot write '{path}': {detail}")]
     WriteFile { path: String, detail: String },
 
-    #[error("cannot serialize config TOML: {0}")]
-    TomlSerialize(#[from] toml::ser::Error),
-
-    #[error("cannot serialize preset library YAML: {0}")]
+    #[error("cannot serialize YAML: {0}")]
     YamlSerialize(String),
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-/// Application configuration persisted to `~/.config/nux-audio/config.toml`.
+/// Application configuration persisted to `~/.config/nux-audio/config.yaml`.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Config {
     /// Model code of the last used device (e.g. `"MG-30"`).
@@ -156,25 +153,26 @@ impl Storage {
 
     // ── Config ────────────────────────────────────────────────────────────────
 
-    /// Load config from `~/.config/nux-audio/config.toml`.
+    /// Load config from `~/.config/nux-audio/config.yaml`.
     /// Returns [`Config::default`] if the file does not exist or cannot be parsed.
     pub fn load_config(&self) -> Config {
-        let Some(path) = self.xdg.find_config_file("config.toml") else {
+        let Some(path) = self.xdg.find_config_file("config.yaml") else {
             return Config::default();
         };
         std::fs::read_to_string(path)
             .ok()
-            .and_then(|s| toml::from_str(&s).ok())
+            .and_then(|s| serde_saphyr::from_str(&s).ok())
             .unwrap_or_default()
     }
 
-    /// Persist `config` to `~/.config/nux-audio/config.toml`.
+    /// Persist `config` to `~/.config/nux-audio/config.yaml`.
     pub fn save_config(&self, config: &Config) -> Result<(), StorageError> {
         let path = self
             .xdg
-            .place_config_file("config.toml")
+            .place_config_file("config.yaml")
             .map_err(|e| StorageError::Xdg(e.to_string()))?;
-        let content = toml::to_string(config)?;
+        let content = serde_saphyr::to_string(config)
+            .map_err(|e| StorageError::YamlSerialize(e.to_string()))?;
         std::fs::write(&path, content).map_err(|e| StorageError::WriteFile {
             path: path.display().to_string(),
             detail: e.to_string(),
@@ -331,9 +329,9 @@ mod tests {
             last_device: Some("MG-30".to_owned()),
             presets_dir: Some(PathBuf::from("/home/user/presets")),
         };
-        let toml_str = toml::to_string(&cfg).unwrap();
-        assert!(toml_str.contains("MG-30"));
-        let restored: Config = toml::from_str(&toml_str).unwrap();
+        let yaml = serde_saphyr::to_string(&cfg).unwrap();
+        assert!(yaml.contains("MG-30"));
+        let restored: Config = serde_saphyr::from_str(&yaml).unwrap();
         assert_eq!(cfg, restored);
     }
 

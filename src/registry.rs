@@ -1,12 +1,12 @@
-/// Runtime device registry loaded from the embedded `devices.toml`.
+/// Runtime device registry loaded from the embedded `devices_registry.yaml`.
 ///
-/// `devices.toml` is embedded at compile time via `include_str!` so there is
-/// no file-system dependency at runtime.  Edit `devices.toml` to add or
-/// modify supported devices; the change takes effect on the next build.
+/// `devices_registry.yaml` is embedded at compile time via `include_str!` so
+/// there is no file-system dependency at runtime.  Edit it to add or modify
+/// supported devices; the change takes effect on the next build.
 use serde::Deserialize;
 use std::sync::LazyLock;
 
-/// Specification for a single Nux device, as defined in `devices.toml`.
+/// Specification for a single Nux device, as defined in `devices_registry.yaml`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DeviceSpec {
     /// Internal slug (snake_case, unique across all devices).
@@ -39,9 +39,9 @@ pub struct DeviceRegistry {
 
 impl DeviceRegistry {
     fn load() -> Self {
-        let raw = include_str!("../devices.toml");
-        let file: DevicesFile = toml::from_str(raw)
-            .expect("devices.toml is embedded at compile time and must be valid TOML");
+        let raw = include_str!("../devices_registry.yaml");
+        let file: DevicesFile = serde_saphyr::from_str(raw)
+            .expect("devices_registry.yaml is embedded at compile time and must be valid YAML");
         Self {
             devices: file.device,
         }
@@ -74,7 +74,7 @@ impl DeviceRegistry {
     }
 }
 
-/// Global device registry, populated from `devices.toml` on first access.
+/// Global device registry, populated from `devices_registry.yaml` on first access.
 pub static REGISTRY: LazyLock<DeviceRegistry> = LazyLock::new(DeviceRegistry::load);
 
 #[cfg(test)]
@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(
             ids.len(),
             sorted.len(),
-            "duplicate device_id found in devices.toml"
+            "duplicate device_id found in devices_registry.yaml"
         );
     }
 
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(
             codes.len(),
             sorted.len(),
-            "duplicate model_code found in devices.toml"
+            "duplicate model_code found in devices_registry.yaml"
         );
     }
 }
