@@ -1,7 +1,7 @@
 # Effects catalog for Nux audio devices
 #
 # Source of truth for effect models, knob parameters, and CC assignments.
-# CC numbers come from MIDI_CC_assignements.md (MG-30 protocol).
+# CC numbers come from MIDI_CC_assignments.md (MG-30 protocol).
 # Model IDs marked [confirmed] are from reverse engineering of the device protocol.
 # Model IDs marked [provisional] are inferred from sequential ordering and need
 # hardware verification before being used in SysEx messages.
@@ -415,6 +415,9 @@ mg30:
         knobs:
           - {id: sens,  label: "SENSITIVITY", cc: 42, range: [0, 100]}
           - {id: decay, label: "DECAY",       cc: 43, range: [0, 100]}
+          # CC44 and CC45 present in MIDI_CC_assignments.md; labels [provisional]
+          - {id: hold,  label: "HOLD",        cc: 44, range: [0, 100]}
+          - {id: mode,  label: "MODE",        cc: 45, range: [0, 6]}
 
   mod:
     bypass_cc: 6
@@ -627,6 +630,8 @@ mg30:
       - {id: level,    label: "LEVEL",    cc: 66, range: [0, 100]}
       - {id: lo_cut,   label: "LO CUT",   cc: 67, range: [0, 100]}
       - {id: hi_cut,   label: "HI CUT",   cc: 68, range: [0, 100]}
+      # CC69 present in MIDI_CC_assignments.md; label [provisional]
+      - {id: knob6,    label: "KNOB 6",   cc: 69, range: [0, 100]}
     shared_other_knobs:
       - {id: level,  label: "LEVEL",  cc: 66, range: [0, 100]}
       - {id: lo_cut, label: "LO CUT", cc: 67, range: [0, 100]}
