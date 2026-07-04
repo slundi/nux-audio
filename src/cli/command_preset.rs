@@ -35,7 +35,7 @@ pub struct SendPresetArgs {
 
 pub async fn run(device_name: &Option<String>, action: PresetAction, format: OutputFormat) {
     match action {
-        PresetAction::Show => show(device_name).await,
+        PresetAction::Show => show(device_name, format).await,
         PresetAction::Get(args) => get(device_name, args, format).await,
         PresetAction::Send(_) => {
             eprintln!(
@@ -193,7 +193,7 @@ async fn query_current_preset_basic(session: &mut super::DeviceSession) -> Optio
     Some((basic.number, basic.active_scene_number.unwrap_or(0)))
 }
 
-async fn show(device_name: &Option<String>) {
+async fn show(device_name: &Option<String>, format: OutputFormat) {
     let mut session = match super::connect_and_detect(device_name).await {
         Some(s) => s,
         None => return,
@@ -291,7 +291,8 @@ async fn show(device_name: &Option<String>) {
     }
 
     match Preset::extract_current_preset_detail_data(&detail_resp) {
-        Ok(preset) => {
+        Ok(mut preset) => {
+            preset.active_scene_number = basic.active_scene_number;
             println!("Name:    {}", preset.name);
             let bpm = 60_000u32.checked_div(preset.tempo as u32).unwrap_or(0);
             println!("Tempo:   {bpm} BPM (raw: {})", preset.tempo);
@@ -306,6 +307,17 @@ async fn show(device_name: &Option<String>) {
                     scene.0[1],
                     scene.0[2]
                 );
+            }
+            // Honor --json/--yaml: emit a machine-readable dump of the parsed preset.
+            let label = match format {
+                OutputFormat::Yaml => "yaml",
+                OutputFormat::Json => "json",
+            };
+            println!("--- serialized ({label}) ---");
+            let file = PresetFile::from_preset(&preset, &session.device.model);
+            match file.to_string_fmt(format) {
+                Ok(s) => println!("{s}"),
+                Err(e) => eprintln!("Failed to serialize preset: {e}"),
             }
         }
         Err(e) => eprintln!("Failed to parse detail data: {e}"),
