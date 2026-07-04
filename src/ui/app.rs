@@ -5,7 +5,10 @@
 //! Render functions live in [`super::render`].
 
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// Lifetime of a transient status-bar message.
+const STATUS_MESSAGE_LIFETIME: Duration = Duration::from_secs(3);
 
 use chrono::Utc;
 use crossterm::{
@@ -54,8 +57,10 @@ pub struct App {
     /// Monotonically increasing tick counter — used for spinner animation.
     pub tick: u64,
     /// Ephemeral status message shown in the status bar.
-    /// The `u64` is the tick at which the message expires.
-    pub status_message: Option<(String, u64)>,
+    /// The `Instant` is the wall-clock deadline at which the message expires;
+    /// using `Instant` (not `self.tick + N`) avoids a wraparound bug where a
+    /// message set near `u64::MAX` would never satisfy `tick < expires`.
+    pub status_message: Option<(String, Instant)>,
     #[allow(dead_code)] // used in future phases for preferences/save
     pub config: Config,
     /// `pub(crate)` so that the mouse handler module can call `save_library`.
@@ -470,9 +475,9 @@ impl App {
         self.set_status("Preset sent to device");
     }
 
-    /// Set a transient status message that disappears after ~3 seconds (30 ticks).
+    /// Set a transient status message that disappears after [`STATUS_MESSAGE_LIFETIME`].
     pub(super) fn set_status(&mut self, msg: &str) {
-        self.status_message = Some((msg.to_owned(), self.tick + 30));
+        self.status_message = Some((msg.to_owned(), Instant::now() + STATUS_MESSAGE_LIFETIME));
     }
 }
 
@@ -549,6 +554,28 @@ mod tests {
         assert!(app.status_message.is_none());
         app.handle_action(GlobalAction::SendPreset);
         assert!(app.status_message.is_some());
+    }
+
+    /// A freshly-set status must expire in the future — not immediately — and
+    /// within a reasonable window of the configured lifetime. Guards against
+    /// the previous tick-based expiry which could wrap and produce an already-
+    /// expired timestamp near `u64::MAX`.
+    #[test]
+    fn test_set_status_expires_in_the_future() {
+        let mut app = App::new();
+        let before = Instant::now();
+        app.set_status("hello");
+        let (msg, expires) = app.status_message.as_ref().expect("status was set");
+        assert_eq!(msg, "hello");
+        assert!(
+            *expires > before,
+            "expiry must be after the moment set_status was called"
+        );
+        // Upper bound with a generous margin for test-runner scheduling jitter.
+        assert!(
+            *expires <= Instant::now() + STATUS_MESSAGE_LIFETIME + Duration::from_secs(1),
+            "expiry must be within lifetime + jitter margin"
+        );
     }
 
     #[test]

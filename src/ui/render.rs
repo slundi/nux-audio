@@ -96,7 +96,7 @@ fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
 
     // Show transient message if still within its lifetime.
     if let Some((msg, expires)) = &app.status_message
-        && app.tick < *expires
+        && std::time::Instant::now() < *expires
     {
         frame.render_widget(
             Line::from(Span::styled(
