@@ -3,8 +3,9 @@
 //
 // Bypass CC: 9
 // Shared knob CCs (electric guitar cabs):
-//   CC64=MIC  CC65=MIC AXIS  CC66=LEVEL  CC67=LO CUT  CC68=HI CUT
-// Bass/acoustic cabs skip MIC and MIC AXIS (no_mic=true in effects.yaml).
+//   CC64=MIC  CC65=MIC AXIS  CC66=LEVEL  CC67=LO CUT  CC68=HI CUT  CC69=KNOB 6
+// CC69 label is provisional (see effects.yaml).
+// Bass/acoustic cabs skip MIC, MIC AXIS, and KNOB 6 (no_mic=true in effects.yaml).
 //
 // IDs are provisional — sequential from 0x00.
 
@@ -29,6 +30,7 @@ fn electric_knobs() -> Vec<KnobDef> {
         knob("level", "LEVEL", 66, 100),
         knob("lo_cut", "LO CUT", 67, 100),
         knob("hi_cut", "HI CUT", 68, 100),
+        knob("knob6", "KNOB 6", 69, 100),
     ]
 }
 

@@ -575,6 +575,43 @@ mod tests {
         assert_ccs_in_range(&ir::MODELS, "Ir", &ir_ccs);
     }
 
+    /// Gate must expose all four knobs from effects.yaml (SENSITIVITY, DECAY, HOLD, MODE).
+    /// The permissive `assert_ccs_in_range` check does not catch missing knobs, so this
+    /// test guards against silent drift between effects.yaml and the compile-time catalog.
+    #[test]
+    fn test_gate_has_all_documented_knobs() {
+        let model = gate::MODELS.get(&0x00).expect("Noise Gate model missing");
+        let ccs: Vec<u8> = model.knobs.iter().map(|k| k.ctrl).collect();
+        assert!(ccs.contains(&42), "gate missing SENSITIVITY (CC42)");
+        assert!(ccs.contains(&43), "gate missing DECAY (CC43)");
+        assert!(ccs.contains(&44), "gate missing HOLD (CC44)");
+        assert!(ccs.contains(&45), "gate missing MODE (CC45)");
+    }
+
+    /// Electric IR cabs must expose CC69 (KNOB 6); bass/acoustic cabs must NOT
+    /// (they carry `no_mic: true` in effects.yaml and use `shared_other_knobs`).
+    #[test]
+    fn test_ir_electric_cabs_have_knob6() {
+        // 0x00 (JZ 120) is an electric cab in effects.yaml.
+        let electric = ir::MODELS.get(&0x00).expect("JZ 120 model missing");
+        let ccs: Vec<u8> = electric.knobs.iter().map(|k| k.ctrl).collect();
+        assert!(
+            ccs.contains(&69),
+            "electric IR cab missing KNOB 6 (CC69): {ccs:?}"
+        );
+    }
+
+    #[test]
+    fn test_ir_bass_cabs_have_no_knob6() {
+        // 0x08 (AGL DB810) is a bass cab (no_mic: true) in effects.yaml.
+        let bass = ir::MODELS.get(&0x08).expect("AGL DB810 model missing");
+        let ccs: Vec<u8> = bass.knobs.iter().map(|k| k.ctrl).collect();
+        assert!(
+            !ccs.contains(&69),
+            "bass IR cab must not have KNOB 6 (CC69): {ccs:?}"
+        );
+    }
+
     #[test]
     fn test_find_model_by_name_found() {
         // "Dist+" is in the EFX catalog at id 0x40
