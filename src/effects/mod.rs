@@ -193,9 +193,13 @@ pub struct KnobDef {
 }
 
 /// Runtime state for a single knob (current value received from device).
+///
+/// `def_id` mirrors [`KnobDef::id`], which owns its `String` since the
+/// lifetime-removal refactor. Constructors typically populate it via
+/// `knob_def.id.clone()`.
 #[derive(Clone, PartialEq, Debug)]
 pub struct KnobState {
-    pub def_id: &'static str,
+    pub def_id: String,
     pub value: u8,
 }
 
