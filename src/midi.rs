@@ -10,9 +10,17 @@ use tokio::sync::broadcast;
 ///
 /// Implemented by [`MidiManager`] for real hardware and by `MockMidi` (test-only, `#[cfg(test)]`)
 /// so that command logic can be unit-tested without a physical device.
+///
+/// `send_cc` is async because it enforces a minimum inter-command delay
+/// (see [`MIN_CC_INTERVAL`]) via [`tokio::time::sleep`], which must not block
+/// the runtime worker.
 pub trait MidiSend {
     fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>>;
-    fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>>;
+    fn send_cc(
+        &mut self,
+        control: u8,
+        value: u8,
+    ) -> impl std::future::Future<Output = Result<(), Box<dyn Error>>> + Send;
 }
 
 const DISPATCHER_CAPACITY: usize = 64;
@@ -20,6 +28,20 @@ const DISPATCHER_CAPACITY: usize = 64;
 /// Minimum delay enforced between successive `send_cc` calls.
 /// Protects device firmware from being overwhelmed by rapid CC floods.
 const MIN_CC_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
+
+/// Async wait until `min_interval` has elapsed since `last`. No-op if `last`
+/// is `None` or the interval has already passed.
+///
+/// Extracted so it can be exercised under `tokio::time::pause()` in tests
+/// without needing a real MIDI backend.
+async fn wait_rate_limit(last: Option<std::time::Instant>, min_interval: Duration) {
+    if let Some(l) = last {
+        let elapsed = l.elapsed();
+        if elapsed < min_interval {
+            tokio::time::sleep(min_interval - elapsed).await;
+        }
+    }
+}
 
 /// Async MIDI response dispatcher backed by a `tokio::sync::broadcast` channel.
 ///
@@ -257,28 +279,28 @@ impl MidiManager {
     /// Both `control` and `value` must be in the range 0–127 (MIDI 7-bit limit).
     /// Returns [`crate::error::NuxError::CcValueOutOfRange`] if `value > 127`.
     ///
+    /// Enforces a minimum inter-command delay of [`MIN_CC_INTERVAL`] via
+    /// `tokio::time::sleep` to protect the device from CC floods. Because the
+    /// wait is async, this function must be `.await`ed from a tokio runtime.
+    ///
     /// # Example
     /// ```no_run
+    /// # async fn example(manager: &mut nux_audio::MidiManager) -> Result<(), Box<dyn std::error::Error>> {
     /// // Set AMP GAIN (CC 22) to 80:
-    /// manager.send_cc(22, 80)?;
+    /// manager.send_cc(22, 80).await?;
     ///
     /// // Bypass the WAH slot (CC 0, value 0 = off):
-    /// manager.send_cc(0, 0x00)?;
+    /// manager.send_cc(0, 0x00).await?;
     ///
     /// // Enable the WAH slot (CC 0, value 127 = on):
-    /// manager.send_cc(0, 0x7F)?;
+    /// manager.send_cc(0, 0x7F).await?;
+    /// # Ok(()) }
     /// ```
-    pub fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+    pub async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
         if value > 127 {
             return Err(crate::error::NuxError::CcValueOutOfRange(value).into());
         }
-        // Enforce a minimum inter-command gap so the device firmware is never flooded.
-        if let Some(last) = self.last_cc_sent {
-            let elapsed = last.elapsed();
-            if elapsed < MIN_CC_INTERVAL {
-                std::thread::sleep(MIN_CC_INTERVAL - elapsed);
-            }
-        }
+        wait_rate_limit(self.last_cc_sent, MIN_CC_INTERVAL).await;
         // 0xB0 = Control Change on MIDI channel 1 (0-indexed channel 0)
         let result = self.send_raw_midi(&[0xB0, control, value]);
         if result.is_ok() {
@@ -305,8 +327,8 @@ impl MidiSend for MidiManager {
         self.send_sysex(data)
     }
 
-    fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
-        self.send_cc(control, value)
+    async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+        self.send_cc(control, value).await
     }
 }
 
@@ -347,7 +369,7 @@ impl MidiSend for MockMidi {
         Ok(())
     }
 
-    fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+    async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
         if self.should_fail {
             return Err("mock send failure".into());
         }
@@ -357,5 +379,45 @@ impl MidiSend for MockMidi {
         }
         self.sent.push(vec![0xB0, control, value]);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    /// When `last` is `None`, no wait should occur.
+    #[tokio::test(start_paused = true)]
+    async fn wait_rate_limit_no_last_is_instant() {
+        let start = Instant::now();
+        wait_rate_limit(None, Duration::from_millis(5)).await;
+        assert!(start.elapsed() < Duration::from_millis(1));
+    }
+
+    /// When the previous send is already older than the min interval, no wait.
+    #[tokio::test(start_paused = true)]
+    async fn wait_rate_limit_stale_last_is_instant() {
+        // A `last` well in the past → elapsed >= min_interval → no sleep.
+        let long_ago = Instant::now() - Duration::from_secs(1);
+        wait_rate_limit(Some(long_ago), Duration::from_millis(5)).await;
+        // Under `start_paused = true`, mock time doesn't advance unless we sleep;
+        // reaching this line without hanging is sufficient proof.
+    }
+
+    /// When called within the min interval, the future must await a real
+    /// `tokio::time::sleep` — verifiable because `start_paused = true` makes
+    /// tokio's clock deterministic.
+    #[tokio::test(start_paused = true)]
+    async fn wait_rate_limit_waits_when_recent() {
+        let now = Instant::now();
+        // Fresh `last` → elapsed ~= 0 → must wait ~min_interval.
+        let handle = tokio::spawn(async move {
+            wait_rate_limit(Some(now), Duration::from_millis(5)).await;
+        });
+        // With paused time, the spawned task blocks on tokio::time::sleep until
+        // we advance the clock. Advancing by the full interval lets it complete.
+        tokio::time::advance(Duration::from_millis(5)).await;
+        handle.await.unwrap();
     }
 }

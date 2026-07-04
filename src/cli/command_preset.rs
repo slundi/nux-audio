@@ -348,7 +348,7 @@ mod tests {
     #[test]
     fn sanitize_basename_unicode_dropped() {
         // Non-ASCII chars become '-', then get collapsed/trimmed.
-        assert_eq!(sanitize_basename("05A", "Café"), "05A-calf");
+        assert_eq!(sanitize_basename("05A", "Café"), "05A-caf");
     }
 
     fn make_preset(number: u8, name: &str) -> Preset {

@@ -26,7 +26,7 @@ pub fn parse_bypass_state(s: &str) -> Result<BypassState, String> {
 ///
 /// Returns `(cc, value)` on success, or an error string suitable for `eprintln!`.
 /// Extracted from `run()` so it can be tested without a real MIDI connection.
-pub(crate) fn send_bypass(
+pub(crate) async fn send_bypass(
     manager: &mut impl MidiSend,
     category: EffectCategory,
     state: BypassState,
@@ -40,6 +40,7 @@ pub(crate) fn send_bypass(
     };
     manager
         .send_cc(cc, value)
+        .await
         .map_err(|e| format!("Failed to send bypass CC: {e}"))?;
     Ok((cc, value))
 }
@@ -64,7 +65,7 @@ pub async fn run(device_name: &Option<String>, category_str: &str, state: Bypass
         None => return,
     };
 
-    match send_bypass(&mut session.manager, category, state) {
+    match send_bypass(&mut session.manager, category, state).await {
         Ok((cc, value)) => println!(
             "{} {} → CC{cc}=0x{value:02X} ({})",
             category.as_str(),
@@ -96,40 +97,44 @@ mod tests {
         assert!(parse_bypass_state("maybe").is_err());
     }
 
-    #[test]
-    fn test_send_bypass_amp_on() {
+    #[tokio::test]
+    async fn test_send_bypass_amp_on() {
         let mut mock = MockMidi::new();
-        let (cc, value) = send_bypass(&mut mock, EffectCategory::Amp, BypassState::On).unwrap();
+        let (cc, value) = send_bypass(&mut mock, EffectCategory::Amp, BypassState::On)
+            .await
+            .unwrap();
         assert_eq!(cc, 3); // Amp bypass CC = discriminant 3
         assert_eq!(value, CC_BYPASS_ON);
         assert_eq!(mock.sent, vec![vec![0xB0, 3, CC_BYPASS_ON]]);
     }
 
-    #[test]
-    fn test_send_bypass_reverb_off() {
+    #[tokio::test]
+    async fn test_send_bypass_reverb_off() {
         let mut mock = MockMidi::new();
-        let (cc, value) = send_bypass(&mut mock, EffectCategory::Reverb, BypassState::Off).unwrap();
+        let (cc, value) = send_bypass(&mut mock, EffectCategory::Reverb, BypassState::Off)
+            .await
+            .unwrap();
         assert_eq!(cc, 8); // Reverb bypass CC = discriminant 8
         assert_eq!(value, CC_BYPASS_OFF);
         assert_eq!(mock.sent, vec![vec![0xB0, 8, CC_BYPASS_OFF]]);
     }
 
-    #[test]
-    fn test_send_bypass_vol_has_no_cc() {
+    #[tokio::test]
+    async fn test_send_bypass_vol_has_no_cc() {
         let mut mock = MockMidi::new();
-        let result = send_bypass(&mut mock, EffectCategory::Vol, BypassState::On);
+        let result = send_bypass(&mut mock, EffectCategory::Vol, BypassState::On).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("no bypass toggle"));
         assert!(mock.sent.is_empty());
     }
 
-    #[test]
-    fn test_send_bypass_propagates_midi_error() {
+    #[tokio::test]
+    async fn test_send_bypass_propagates_midi_error() {
         let mut mock = MockMidi {
             should_fail: true,
             ..MockMidi::new()
         };
-        let result = send_bypass(&mut mock, EffectCategory::Amp, BypassState::On);
+        let result = send_bypass(&mut mock, EffectCategory::Amp, BypassState::On).await;
         assert!(result.is_err());
     }
 }
