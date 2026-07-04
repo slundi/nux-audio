@@ -612,6 +612,66 @@ mod tests {
         );
     }
 
+    /// No two effect categories may claim the same knob CC. Same-CC-across-
+    /// models-within-a-category is fine (models share knob layouts by design),
+    /// but cross-category collision means one physical knob would drive two
+    /// effect slots — an ambiguity the device firmware cannot resolve.
+    #[test]
+    fn test_no_knob_cc_collides_across_categories() {
+        let mut owner: HashMap<u8, EffectCategory> = HashMap::new();
+        for cat_val in 0..=11u8 {
+            let category = EffectCategory::from_u8(cat_val).unwrap();
+            let Some(models) = models_map(category) else {
+                continue;
+            };
+            for opt in models.values() {
+                for knob in &opt.knobs {
+                    if let Some(&prev) = owner.get(&knob.ctrl) {
+                        assert!(
+                            prev == category,
+                            "CC{} collision: {:?} and {:?} both claim it (knob '{}' in {} model 0x{:02X} '{}')",
+                            knob.ctrl,
+                            prev,
+                            category,
+                            knob.id,
+                            category.as_str(),
+                            opt.id,
+                            opt.title,
+                        );
+                    } else {
+                        owner.insert(knob.ctrl, category);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Knob CCs must not overlap the bypass-CC range (0..=10, matching each
+    /// non-Vol category's discriminant). A knob at CC5, for instance, would
+    /// be interpreted by the device as a gate-bypass toggle.
+    #[test]
+    fn test_knob_ccs_do_not_overlap_bypass_range() {
+        for cat_val in 0..=11u8 {
+            let category = EffectCategory::from_u8(cat_val).unwrap();
+            let Some(models) = models_map(category) else {
+                continue;
+            };
+            for opt in models.values() {
+                for knob in &opt.knobs {
+                    assert!(
+                        knob.ctrl > 10,
+                        "knob '{}' in {} model 0x{:02X} '{}' uses CC{} — that's in the bypass-CC range (0..=10)",
+                        knob.id,
+                        category.as_str(),
+                        opt.id,
+                        opt.title,
+                        knob.ctrl,
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn test_find_model_by_name_found() {
         // "Dist+" is in the EFX catalog at id 0x40
