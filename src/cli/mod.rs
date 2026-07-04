@@ -79,11 +79,7 @@ impl Cli {
                     eprintln!("TUI error: {e}");
                 }
             }
-            Commands::Raw {
-                ref data,
-                decimal,
-                with_prefixes: _,
-            } => {
+            Commands::Raw { ref data, decimal } => {
                 eprintln!(
                     "WARNING: Raw SysEx bypasses all safety checks. \
                      Sending incorrect data may cause device malfunctions or data loss."
@@ -129,7 +125,6 @@ pub enum Commands {
     Raw {
         data: Vec<String>,
         decimal: bool,
-        with_prefixes: bool,
     },
 }
 
@@ -275,23 +270,21 @@ fn cmd_preset() -> impl Parser<Commands> {
 }
 
 fn cmd_raw() -> impl Parser<Commands> {
-    let data = positional::<String>("DATA")
-        .help("Hex or decimal byte sequence")
-        .many();
     let decimal = long("decimal")
         .help("Parse data as decimal instead of hex")
         .switch();
-    let with_prefixes = long("with-prefixes")
-        .help("Include custom device-ID prefix bytes")
-        .switch();
-    construct!(Commands::Raw {
-        data,
-        decimal,
-        with_prefixes,
-    })
-    .to_options()
-    .descr("Send raw SysEx data (start and end bytes are added automatically)\n\nWARNING: bypasses all safety checks — use only for debugging/reverse-engineering.")
-    .command("raw")
+    // Positional MUST be last in the `construct!` tuple — bpaf panics at
+    // parser-build time if a flag follows a positional (see bpaf::meta).
+    let data = positional::<String>("DATA")
+        .help("Hex or decimal byte sequence")
+        .many();
+    construct!(Commands::Raw { decimal, data })
+        .to_options()
+        .descr(
+            "Send raw SysEx data (start and end bytes are added automatically)\n\n\
+             WARNING: bypasses all safety checks — use only for debugging/reverse-engineering.",
+        )
+        .command("raw")
 }
 
 pub fn cli_parser() -> OptionParser<Cli> {
@@ -650,6 +643,44 @@ mod tests {
             assert_eq!(state, BypassState::Off);
         } else {
             panic!("Expected bypass command");
+        }
+    }
+
+    /// Regression: bpaf panicked at parser-build time when a positional
+    /// preceded any flag in `construct!`. Constructing the parser and
+    /// asking for --help exercises the same code path that crashed.
+    #[test]
+    fn test_raw_help_does_not_panic() {
+        let parser = cli_parser();
+        // `--help` returns `Err(ParseFailure::Stdout(_))` — the important
+        // thing is that parser CONSTRUCTION (which is where the panic used
+        // to fire) succeeded and we get a normal parse result, not a panic.
+        let _ = parser.run_inner(Args::from(&["raw", "--help"]));
+    }
+
+    #[test]
+    fn test_raw_hex_data() {
+        let cli = cli_parser()
+            .run_inner(Args::from(&["raw", "0x01", "0x02", "0x03"]))
+            .unwrap();
+        if let Commands::Raw { data, decimal } = cli.command {
+            assert_eq!(data, vec!["0x01", "0x02", "0x03"]);
+            assert!(!decimal);
+        } else {
+            panic!("Expected Raw command");
+        }
+    }
+
+    #[test]
+    fn test_raw_decimal_flag_before_data() {
+        let cli = cli_parser()
+            .run_inner(Args::from(&["raw", "--decimal", "1", "2", "3"]))
+            .unwrap();
+        if let Commands::Raw { data, decimal } = cli.command {
+            assert!(decimal);
+            assert_eq!(data, vec!["1", "2", "3"]);
+        } else {
+            panic!("Expected Raw command");
         }
     }
 }
