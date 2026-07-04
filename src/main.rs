@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // let devices = crate::device::Device::detect();
     // if devices.is_empty() {
-    //     log::warn!("No MIDI device found, exiting");
+    //     tracing::warn!("No MIDI device found, exiting");
     // }
 
     Ok(())

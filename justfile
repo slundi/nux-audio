@@ -47,11 +47,11 @@ update-hooks:
 scan-secrets:
     gitleaks detect --verbose --redact
 
-# Check that overall line coverage meets the 80% threshold
+# Check that overall line coverage meets the 85% threshold (matches CI).
 # BASE is accepted for interface compatibility with CI (e.g.: just coverage-check master)
 coverage-check BASE="master":
     cargo llvm-cov --lcov --output-path lcov.info
-    cargo llvm-cov report --fail-under-lines 80
+    cargo llvm-cov report --fail-under-lines 85
 
 # --- Cleanup ---
 

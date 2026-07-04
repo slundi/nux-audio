@@ -1,8 +1,8 @@
 use crate::error::NuxError;
 use crate::preset::Preset;
-use log::error;
 use midir::{MidiInput, MidiOutput};
 use std::collections::HashMap;
+use tracing::error;
 
 /// Manufacturer list.
 ///
