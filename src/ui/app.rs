@@ -120,6 +120,9 @@ impl App {
     // ── Action dispatch ───────────────────────────────────────────────────────
 
     /// Execute a logical action, decoupled from the physical key that triggered it.
+    ///
+    /// The match is exhaustive — see [`super::action::GlobalAction`]: every new
+    /// variant must have its dispatch arm added here in the same commit.
     pub fn handle_action(&mut self, action: GlobalAction) {
         match action {
             GlobalAction::Quit => self.should_quit = true,
@@ -127,7 +130,6 @@ impl App {
             GlobalAction::Help => self.open_overlay(Overlay::Help),
             GlobalAction::GetPreset => self.action_get_from_device(),
             GlobalAction::SendPreset => self.action_send_to_device(),
-            _ => {}
         }
     }
 
