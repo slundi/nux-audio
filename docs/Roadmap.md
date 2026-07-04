@@ -30,8 +30,8 @@
 
 Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 
-* [~] **CLI structure**: `clap`-based commands exist — `devices`, `info`, `preset show/get/send`, `effect`, `raw`. Most are stubs printing TODO messages. `raw` can send arbitrary hex/decimal SysEx. `info` sends the version request.
-* [ ] **Functional commands**: Wire commands to actual MIDI operations (get preset, set knob, toggle effect, export preset).
+* [~] **CLI structure**: `bpaf`-based commands exist — `devices`, `info`, `preset show/get/send`, `effect`, `bypass`, `model`, `listen`, `raw`, `tui`. `preset get` fetches and writes to `--yaml`/`--json` file. `preset send` exits with code 2 (write-preset SysEx opcode not yet reverse-engineered). `raw` can send arbitrary hex/decimal SysEx.
+* [~] **Functional commands**: `preset show`, `preset get`, `effect <cat> <knob>=<value>`, `bypass`, `model`, `info` all wired to real MIDI. `preset send` and bulk operations still pending.
 
 ## Phase 6: TUI (stateful)
 
@@ -52,7 +52,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 │ Effect Chain: Clean Jazz  [Scene 1]  [Scene 2]  [Scene 3]        │
 │ [    ]──[COMP]──[    ]──[ AMP ]──[ EQ ]──[    ]──[    ]──[REV]  │
 │          Ratio:4         TubeCl   Low:40            Hall         │
-│          Thr:-10         Gain:30  Mid:50            Mix:35       │
+│          The:-10         Gain:30  Mid:50            Mix:35       │
 └──────────────────────────────────────────────────────────────────┘
  d:device  g:get  s:send  e:export  /:search  ?:help
 ```
