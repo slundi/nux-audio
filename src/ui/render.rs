@@ -9,7 +9,9 @@ use ratatui::{
 };
 
 use super::app::App;
-use super::state::{ICON_OFFLINE, ICON_ONLINE, OperationStatus, Overlay, SPINNER_FRAMES, Tab};
+use super::state::{
+    ICON_OFFLINE, ICON_ONLINE, MOCK_MIDI_BANNER, OperationStatus, Overlay, SPINNER_FRAMES, Tab,
+};
 use super::{
     overlay_conflict, overlay_device, overlay_drum, overlay_help, overlay_looper, tab_about,
     tab_liveboard, tab_presets,
@@ -85,6 +87,13 @@ fn render_tab_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 }
 
 fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    // Reserve the right edge for the persistent "MOCK MIDI" banner so users are
+    // never surprised by synthetic device state. Everything else (transient
+    // messages, key hints) is rendered on the left half.
+    let banner_width = MOCK_MIDI_BANNER.len() as u16;
+    let [left_area, banner_area] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(banner_width)]).areas(area);
+
     // Show transient message if still within its lifetime.
     if let Some((msg, expires)) = &app.status_message
         && app.tick < *expires
@@ -94,28 +103,75 @@ fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
                 format!(" {msg}"),
                 Style::default().fg(Color::Yellow),
             )),
-            area,
+            left_area,
         );
-        return;
+    } else {
+        let hints = if app.active_overlay.is_some() {
+            " Esc:cancel"
+        } else {
+            match app.active_tab {
+                Tab::Presets => {
+                    if app.chain_panel_active {
+                        " ←/→:slot  Tab:scene  Esc:back  q:quit"
+                    } else {
+                        " j/k:move  Enter:chain  g:get  s:send  d:device  l:looper  D:drums  q:quit"
+                    }
+                }
+                Tab::LiveBoard => " ←/→:slot  Tab:scene  d:device  l:looper  D:drums  q:quit",
+                Tab::About => " q:quit",
+            }
+        };
+        frame.render_widget(
+            Line::from(Span::styled(hints, Style::default().fg(Color::DarkGray))),
+            left_area,
+        );
     }
 
-    let hints = if app.active_overlay.is_some() {
-        " Esc:cancel"
-    } else {
-        match app.active_tab {
-            Tab::Presets => {
-                if app.chain_panel_active {
-                    " ←/→:slot  Tab:scene  Esc:back  q:quit"
-                } else {
-                    " j/k:move  Enter:chain  g:get  s:send  d:device  l:looper  D:drums  q:quit"
-                }
-            }
-            Tab::LiveBoard => " ←/→:slot  Tab:scene  d:device  l:looper  D:drums  q:quit",
-            Tab::About => " q:quit",
-        }
-    };
     frame.render_widget(
-        Line::from(Span::styled(hints, Style::default().fg(Color::DarkGray))),
-        area,
+        Line::from(Span::styled(
+            MOCK_MIDI_BANNER,
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        banner_area,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    /// The mock-midi banner constant must clearly say it's mock data.
+    /// Anchors the invariant so a future refactor can't accidentally empty it.
+    #[test]
+    fn mock_midi_banner_is_labeled() {
+        assert!(MOCK_MIDI_BANNER.contains("MOCK"));
+        assert!(!MOCK_MIDI_BANNER.trim().is_empty());
+    }
+
+    /// End-to-end render assertion: the full app render must place the mock
+    /// banner text somewhere in the status row.
+    #[test]
+    fn render_places_mock_banner_in_status_row() {
+        let app = App::new();
+        // Height 5 so the layout has: 1 tab_row + 3 content + 1 status_row.
+        let backend = TestBackend::new(80, 5);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| render(f, &app)).unwrap();
+
+        let buf = terminal.backend().buffer();
+        // The status row is the last line of the buffer.
+        let last_row_y = buf.area().height - 1;
+        let mut row = String::new();
+        for x in 0..buf.area().width {
+            row.push_str(buf[(x, last_row_y)].symbol());
+        }
+        assert!(
+            row.contains("MOCK"),
+            "status row missing MOCK banner: {row:?}"
+        );
+    }
 }

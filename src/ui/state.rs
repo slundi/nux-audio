@@ -15,6 +15,15 @@ pub const ICON_ONLINE: &str = "󰣲";
 /// Braille spinner frames shown when an operation is in progress.
 pub const SPINNER_FRAMES: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
 
+/// Persistent status-bar indicator warning that the TUI's device data is mock.
+///
+/// The ratatui TUI does not yet exchange MIDI messages with the device
+/// (roadmap phase 6). Every "Online" state and preset shown is synthetic —
+/// this banner keeps that fact visible so users don't act on stale/fake data.
+///
+/// Remove once real MIDI is wired into the event loop.
+pub const MOCK_MIDI_BANNER: &str = "[MOCK MIDI — phase 6] ";
+
 // ── Tab ───────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
