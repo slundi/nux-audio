@@ -23,11 +23,49 @@ pub trait MidiSend {
     ) -> impl std::future::Future<Output = Result<(), Box<dyn Error>>> + Send;
 }
 
-const DISPATCHER_CAPACITY: usize = 64;
+/// Buffer size for the broadcast channel that fans out incoming MIDI messages.
+///
+/// Sized to absorb a full bank dump (128 presets × several SysEx packets each)
+/// with headroom in case a subscriber is briefly slow. Previously 64, which
+/// could silently overflow during multi-preset fetches.
+const DISPATCHER_CAPACITY: usize = 256;
 
 /// Minimum delay enforced between successive `send_cc` calls.
 /// Protects device firmware from being overwhelmed by rapid CC floods.
 const MIN_CC_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
+
+/// Outcome of processing one `broadcast::Receiver::recv()` result inside
+/// [`MidiDispatcher::await_response`]. Extracted so the pattern-match branches —
+/// especially the silent-drop-on-lag path — can be unit-tested without needing
+/// to race a real broadcast channel.
+enum RecvStep {
+    /// Terminate the loop and return this result to the caller.
+    Return(Result<Vec<u8>, crate::error::NuxError>),
+    /// Discard this message and keep waiting.
+    Continue,
+}
+
+/// Classify a `recv()` result against `pattern`, emitting a stderr warning
+/// when tokio reports lag (broadcast overflow → silent message drops).
+fn classify_recv(result: Result<Vec<u8>, broadcast::error::RecvError>, pattern: &[u8]) -> RecvStep {
+    match result {
+        Ok(msg) if msg.starts_with(pattern) => RecvStep::Return(Ok(msg)),
+        Ok(_) => RecvStep::Continue,
+        Err(broadcast::error::RecvError::Lagged(n)) => {
+            // The receiver fell behind by `n` messages; those are lost.
+            // Warn the user because a lag during a bank dump means silently
+            // missing preset data downstream.
+            eprintln!(
+                "warning: MIDI dispatcher lagged, dropped {n} message(s) — \
+                 consider increasing DISPATCHER_CAPACITY or slowing bulk queries"
+            );
+            RecvStep::Continue
+        }
+        Err(broadcast::error::RecvError::Closed) => {
+            RecvStep::Return(Err(crate::error::NuxError::ChannelClosed))
+        }
+    }
+}
 
 /// Async wait until `min_interval` has elapsed since `last`. No-op if `last`
 /// is `None` or the interval has already passed.
@@ -74,13 +112,9 @@ impl MidiDispatcher {
         let pattern = pattern.to_vec();
         let result = tokio::time::timeout(timeout, async move {
             loop {
-                match rx.recv().await {
-                    Ok(msg) if msg.starts_with(&pattern) => return Ok(msg),
-                    Ok(_) => continue,
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(broadcast::error::RecvError::Closed) => {
-                        return Err(crate::error::NuxError::ChannelClosed);
-                    }
+                match classify_recv(rx.recv().await, &pattern) {
+                    RecvStep::Return(r) => return r,
+                    RecvStep::Continue => continue,
                 }
             }
         })
@@ -419,5 +453,50 @@ mod tests {
         // we advance the clock. Advancing by the full interval lets it complete.
         tokio::time::advance(Duration::from_millis(5)).await;
         handle.await.unwrap();
+    }
+
+    /// Matching message → terminate with Ok.
+    #[test]
+    fn classify_recv_matching_message_returns_ok() {
+        let step = classify_recv(Ok(vec![0xF0, 0x43, 0x58, 0x99]), &[0xF0, 0x43, 0x58]);
+        match step {
+            RecvStep::Return(Ok(msg)) => assert_eq!(msg, vec![0xF0, 0x43, 0x58, 0x99]),
+            _ => panic!("expected Return(Ok(...)), got other"),
+        }
+    }
+
+    /// Non-matching message → keep polling.
+    #[test]
+    fn classify_recv_unrelated_message_continues() {
+        let step = classify_recv(Ok(vec![0xB0, 0x22, 0x50]), &[0xF0, 0x43, 0x58]);
+        matches!(step, RecvStep::Continue).then_some(()).unwrap();
+    }
+
+    /// Lag → must continue (regression: previously silent, now also warns).
+    /// The behavioural invariant is that lag is NOT a hard failure.
+    #[test]
+    fn classify_recv_lagged_continues_not_returns() {
+        let step = classify_recv(
+            Err(broadcast::error::RecvError::Lagged(7)),
+            &[0xF0, 0x43, 0x58],
+        );
+        assert!(
+            matches!(step, RecvStep::Continue),
+            "Lagged must not cause await_response to return — it drops n messages and keeps polling"
+        );
+    }
+
+    /// Channel closed → surface as `ChannelClosed` so the caller knows the
+    /// dispatcher is dead (as opposed to just idle).
+    #[test]
+    fn classify_recv_closed_returns_channel_closed() {
+        let step = classify_recv(
+            Err(broadcast::error::RecvError::Closed),
+            &[0xF0, 0x43, 0x58],
+        );
+        match step {
+            RecvStep::Return(Err(crate::error::NuxError::ChannelClosed)) => {}
+            _ => panic!("expected Return(Err(ChannelClosed))"),
+        }
     }
 }
