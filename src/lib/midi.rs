@@ -1,5 +1,8 @@
-// MIDI utilities and SysEx helpers
-// use crate::DeviceType;
+//! MIDI utilities: SysEx framing constants and helpers.
+//!
+//! Wire-level MIDI System Exclusive (SysEx) messages always start with `0xF0`
+//! and end with `0xF7`. This module exposes those bounds as [`SYSEX_START`]
+//! and [`SYSEX_END`] so higher-level builders don't hardcode them.
 
 /// Universal SysEx start byte (`0xF0`), required at the beginning of every SysEx message.
 pub const SYSEX_START: u8 = 0xF0;

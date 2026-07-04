@@ -1,3 +1,5 @@
+//! Domain-level error type for the `nux_audio` library crate.
+
 /// Domain-level errors for the `nux_audio` library crate.
 #[derive(thiserror::Error, Debug)]
 pub enum NuxAudioError {
@@ -9,7 +11,9 @@ pub enum NuxAudioError {
     /// Produced when a two-character hex chunk contains a non-hex digit.
     #[error("invalid hex digit in '{chunk}': {source}")]
     InvalidHexDigit {
+        /// The two-character hex chunk that failed to parse.
         chunk: String,
+        /// Underlying integer-parse error from `u8::from_str_radix`.
         #[source]
         source: std::num::ParseIntError,
     },

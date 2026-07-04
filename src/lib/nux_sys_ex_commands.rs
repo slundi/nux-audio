@@ -1,17 +1,13 @@
+//! NUX SysEx command constants, typed builders, and the parameterized
+//! [`SysExTemplate`] system used to construct MG-30 / Mighty payloads.
+//!
+//! Every builder here returns a payload in the form
+//! `[0x58, <opcode…>, <data…>]`. `MidiManager::send_sysex` auto-prepends
+//! `0xF0 0x43` and appends `0xF7` to produce the on-wire message
+//! `0xF0 0x43 0x58 <opcode…> <data…> 0xF7`.
+
 use crate::error::NuxAudioError;
 use std::collections::HashMap;
-
-// ── SysEx template system ─────────────────────────────────────────────────────
-//
-// SysEx payload layout (bytes sent to `MidiManager::send_sysex`):
-//   [0x58, <opcode bytes…>, <data bytes…>]
-//
-// `send_sysex` automatically prepends 0xF0 0x43 and appends 0xF7, producing
-// the full wire message:
-//   0xF0  0x43  0x58  <opcode…>  <data…>  0xF7
-//
-// Templates and typed builders in this module all return payloads in this
-// format so callers can pass the result directly to `send_sysex`.
 
 /// A slot in a SysEx payload template — either a fixed byte or a named param.
 #[derive(Debug, Clone, PartialEq)]
@@ -48,7 +44,12 @@ pub enum TemplateSlot {
 /// ```
 #[derive(Debug, Clone)]
 pub struct SysExTemplate {
+    /// Human-readable description of what the template represents
+    /// (e.g. `"MG-30 preset change"`). Used in help output and logs.
     pub description: &'static str,
+    /// Ordered slots forming the SysEx payload. Fixed [`TemplateSlot::Byte`]
+    /// values are emitted verbatim; [`TemplateSlot::Param`] slots are
+    /// substituted from the `params` map passed to [`SysExTemplate::build`].
     pub slots: Vec<TemplateSlot>,
 }
 
