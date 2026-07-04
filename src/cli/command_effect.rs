@@ -2,7 +2,7 @@
 //
 // Exposes `EffectParameter`, `KnobIdentifier`, parameter parsers, and `run()`.
 
-use crate::effects::{EffectCategory, find_cc_for_knob};
+use crate::effects::{EffectCategory, find_knob_def};
 use crate::midi::MidiSend;
 
 #[derive(Debug, Clone)]
@@ -71,12 +71,25 @@ pub(crate) async fn send_effect(
     let cc = match &param.knob {
         KnobIdentifier::Id(n) => *n,
         KnobIdentifier::Name(name) => {
-            find_cc_for_knob(category, name.as_str()).ok_or_else(|| {
+            let knob = find_knob_def(category, name.as_str()).ok_or_else(|| {
                 format!(
                     "Knob '{name}' not found in {} catalog. Use a CC number directly (e.g. 22=80).",
                     category.as_str()
                 )
-            })?
+            })?;
+            // Range validation is only applied to named knobs — numeric CC ids
+            // are the raw escape hatch and the caller opts out of catalog checks.
+            if let Some(end) = knob.range_end
+                && param.value > end
+            {
+                return Err(format!(
+                    "Value {} out of range for {} knob '{}' (0..={end})",
+                    param.value,
+                    category.as_str(),
+                    name,
+                ));
+            }
+            knob.ctrl
         }
     };
     manager
@@ -213,5 +226,73 @@ mod tests {
         };
         let result = send_effect(&mut mock, EffectCategory::Amp, &param).await;
         assert!(result.is_err());
+    }
+
+    // Range-validation for named knobs — the "raw CC by numeric id" path
+    // intentionally bypasses this to remain an escape hatch.
+
+    #[tokio::test]
+    async fn test_send_effect_rejects_value_above_knob_range() {
+        // IR "mic" is CC64 with range 0..=7 (DYN421/S57/…).
+        let mut mock = MockMidi::new();
+        let param = EffectParameter {
+            knob: KnobIdentifier::Name("mic".to_owned()),
+            value: 100, // way above the 0..=7 range
+        };
+        let err = send_effect(&mut mock, EffectCategory::Ir, &param)
+            .await
+            .unwrap_err();
+        assert!(err.contains("out of range"), "unexpected error: {err}");
+        assert!(err.contains("0..=7"), "unexpected error: {err}");
+        assert!(
+            mock.sent.is_empty(),
+            "invalid value must not be transmitted"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_send_effect_accepts_value_at_range_end() {
+        // "mic" range is 0..=7 — value 7 must be accepted.
+        let mut mock = MockMidi::new();
+        let param = EffectParameter {
+            knob: KnobIdentifier::Name("mic".to_owned()),
+            value: 7,
+        };
+        let (cc, value) = send_effect(&mut mock, EffectCategory::Ir, &param)
+            .await
+            .unwrap();
+        assert_eq!(cc, 64);
+        assert_eq!(value, 7);
+    }
+
+    #[tokio::test]
+    async fn test_send_effect_rejects_one_over_range_end() {
+        // Boundary: mode range is 0..=6, so 7 must be rejected.
+        let mut mock = MockMidi::new();
+        let param = EffectParameter {
+            knob: KnobIdentifier::Name("mode".to_owned()),
+            value: 7,
+        };
+        let err = send_effect(&mut mock, EffectCategory::Gate, &param)
+            .await
+            .unwrap_err();
+        assert!(err.contains("0..=6"), "unexpected error: {err}");
+        assert!(mock.sent.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_send_effect_numeric_id_skips_range_check() {
+        // IR mic (CC64) has range 0..=7 — but with a raw numeric id, we do NOT
+        // consult the catalog, so value 100 (still ≤ 127 MIDI limit) succeeds.
+        let mut mock = MockMidi::new();
+        let param = EffectParameter {
+            knob: KnobIdentifier::Id(64),
+            value: 100,
+        };
+        let (cc, value) = send_effect(&mut mock, EffectCategory::Ir, &param)
+            .await
+            .unwrap();
+        assert_eq!(cc, 64);
+        assert_eq!(value, 100);
     }
 }

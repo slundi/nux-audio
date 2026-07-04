@@ -345,9 +345,18 @@ pub fn find_model_by_name(
 /// in the catalog defines a knob with the given `id`.  In those cases the caller should
 /// ask the user to supply the CC number directly.
 pub fn find_cc_for_knob(category: EffectCategory, knob_id: &str) -> Option<u8> {
+    find_knob_def(category, knob_id).map(|k| k.ctrl)
+}
+
+/// Locate the `KnobDef` for the first model in `category` that defines a knob with `knob_id`.
+///
+/// Same lookup rule as [`find_cc_for_knob`] — knobs of the same `id` share CC and range
+/// across models within a slot — but returns the full definition so callers can enforce
+/// `range_end` when validating values before sending.
+pub fn find_knob_def(category: EffectCategory, knob_id: &str) -> Option<&'static KnobDef> {
     for opt in models_map(category)?.values() {
         if let Some(knob) = opt.knobs.iter().find(|k| k.id == knob_id) {
-            return Some(knob.ctrl);
+            return Some(knob);
         }
     }
     None
