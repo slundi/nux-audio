@@ -14,7 +14,7 @@ repository = "https://codeberg.org/slundi/nux-audio"
 [dependencies]
 bpaf = "0.9"
 midir = "0.11"
-humantime = "2.3"
+humantime = "2.4"
 xdg = "3.0"
 
 # Logging
@@ -25,7 +25,7 @@ tracing-appender = "0.2"
 ratatui = "0.30"
 crossterm = "0.29"
 
-tokio = { version = "1.52", features = ["full"] }
+tokio = { version = "1.54", features = ["full"] }
 
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -36,7 +36,7 @@ chrono = { version = "0.4", features = ["serde"] } # For timestamps in presets
 [dev-dependencies]
 tokio-test = "0.4" # For async testing
 criterion = "0.8"  # For benchmarking
-rstest = "0.26"
+rstest = "0.28"
 
 # [[bench]]
 # name = "effects_benchmark"

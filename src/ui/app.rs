@@ -505,6 +505,28 @@ pub fn run_tui() -> io::Result<()> {
     result
 }
 
+fn run_event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
+    let mut app = App::new();
+    let mut last_area = Rect::default();
+    loop {
+        terminal.draw(|f| {
+            last_area = f.area();
+            render(f, &app);
+        })?;
+        if event::poll(Duration::from_millis(100))? {
+            match event::read()? {
+                Event::Key(key) => app.handle_key(key),
+                Event::Mouse(mouse) => app.handle_mouse(mouse, last_area),
+                _ => {}
+            }
+        }
+        app.tick = app.tick.wrapping_add(1);
+        if app.should_quit {
+            return Ok(());
+        }
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -613,27 +635,5 @@ mod tests {
         let mut app = App::new();
         app.handle_key(make_key(KeyCode::F(2)));
         assert_eq!(app.active_tab, Tab::LiveBoard);
-    }
-}
-
-fn run_event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
-    let mut app = App::new();
-    let mut last_area = Rect::default();
-    loop {
-        terminal.draw(|f| {
-            last_area = f.area();
-            render(f, &app);
-        })?;
-        if event::poll(Duration::from_millis(100))? {
-            match event::read()? {
-                Event::Key(key) => app.handle_key(key),
-                Event::Mouse(mouse) => app.handle_mouse(mouse, last_area),
-                _ => {}
-            }
-        }
-        app.tick = app.tick.wrapping_add(1);
-        if app.should_quit {
-            return Ok(());
-        }
     }
 }
