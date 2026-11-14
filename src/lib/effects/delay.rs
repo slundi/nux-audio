@@ -1,4 +1,4 @@
-// DELAY models for MG-30
+//! DELAY models for MG-30
 // Reference: delay.rs device observations + effects.yaml
 //
 // Bypass CC: 7

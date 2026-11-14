@@ -1,4 +1,4 @@
-// GATE model for MG-30 — single model (Noise Gate)
+//! GATE model for MG-30 — single model (Noise Gate)
 // Reference: gate.rs device observations + effects.yaml
 //
 // Bypass CC: 5

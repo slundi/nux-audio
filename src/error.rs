@@ -1,57 +1,16 @@
-//! Domain-level error types for the nux-cli binary.
+//! Error types for the nux-cli binary's I/O layers.
 //!
-//! - [`NuxError`]: SysEx response parsing, effect catalog lookups, byte utilities.
 //! - [`MidiError`]: MIDI backend setup, port connection, sending and response waiting.
 //! - [`ExportError`]: preset file (de)serialization, schema versioning and file I/O.
 //! - [`SessionError`]: device selection and device operations (`crate::session`).
 //!
-//! CLI-specific errors live in `crate::cli::error` and wrap these via `#[from]`.
+//! Response decoding and catalog errors come from the library
+//! ([`NuxAudioError`]). CLI-specific errors live in `crate::cli::error` and wrap
+//! all of these via `#[from]`.
 
+use nux_audio::error::NuxAudioError;
 use std::path::PathBuf;
 use std::time::Duration;
-
-/// Domain-level errors for the nux-cli binary.
-///
-/// Covers parsing of SysEx responses from the device, effect catalog lookups,
-/// and raw byte utilities.
-#[derive(thiserror::Error, Debug)]
-pub enum NuxError {
-    // ── Hex utility ──────────────────────────────────────────────────────────
-    #[error("hex string must have an even number of characters, got {0}")]
-    OddLengthHex(usize),
-
-    #[error("invalid hex digit in '{chunk}': {source}")]
-    InvalidHexDigit {
-        chunk: String,
-        #[source]
-        source: std::num::ParseIntError,
-    },
-
-    // ── Device response parsing ───────────────────────────────────────────────
-    #[error("SysEx response too short: {actual} bytes (expected at least {expected})")]
-    ResponseTooShort { expected: usize, actual: usize },
-
-    #[error("cannot parse firmware version from '{0}'")]
-    VersionParse(String),
-
-    #[error("invalid UTF-8 in device response: {0}")]
-    Utf8(#[from] std::string::FromUtf8Error),
-
-    #[error("invalid byte 0x{0:02X} in preset name (expected printable ASCII)")]
-    InvalidPresetName(u8),
-
-    // ── Effect catalog lookup ─────────────────────────────────────────────────
-    #[error(
-        "SysEx response too short for effect parsing: {actual} bytes (need at least {expected})"
-    )]
-    EffectResponseTooShort { expected: usize, actual: usize },
-
-    #[error("unknown effect category byte 0x{0:02X}")]
-    UnknownEffectCategory(u8),
-
-    #[error("unknown model 0x{model_id:02X} for category 0x{category_byte:02X}")]
-    UnknownEffectModel { category_byte: u8, model_id: u8 },
-}
 
 /// Errors raised by the MIDI transport layer (`crate::midi`).
 #[derive(thiserror::Error, Debug)]
@@ -142,7 +101,7 @@ pub enum SessionError {
     Parse {
         response: &'static str,
         #[source]
-        source: NuxError,
+        source: NuxAudioError,
     },
 
     // ── Catalog / argument validation ─────────────────────────────────────────

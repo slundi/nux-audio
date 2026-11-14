@@ -2,16 +2,12 @@ use std::fs::OpenOptions;
 
 pub mod cli;
 pub mod device;
-pub mod effects;
 pub mod error;
 pub mod export;
 pub mod midi;
-pub mod preset;
-pub mod registry;
 pub mod session;
 pub mod storage;
 pub mod ui;
-pub mod utils;
 
 // type SysExResponseData = DeviceVersion | Preset | Partial<Preset>;
 // type KnobEntry = [string, string, [number, number]?];

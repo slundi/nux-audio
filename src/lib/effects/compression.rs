@@ -1,4 +1,4 @@
-// COMPRESSOR models for MG-30
+//! COMPRESSOR models for MG-30
 // Reference: compression.rs device observations + effects.yaml
 //
 // Bypass CC: 1

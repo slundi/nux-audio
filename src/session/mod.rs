@@ -7,27 +7,25 @@
 //!
 //! Generic over the transport so all logic is unit-tested with `MockMidi`.
 
-use crate::device::{Device, extract_version};
-use crate::effects::{
-    CC_BYPASS_OFF, CC_BYPASS_ON, EffectCategory, FirmwareGen, find_knob_def, find_model_by_name,
-};
+use crate::device::Device;
 use crate::error::SessionError;
 use crate::midi::{MidiConnection, MidiTransport};
-use crate::preset::Preset;
-use nux_audio::nux_sys_ex_commands::{
-    CURRENT_PRESET_BASIC, DEVICE_VERSION_REQUEST, mg30_change_effect_model, mg30_request_preset,
+use nux_audio::effects::{
+    CC_BYPASS_OFF, CC_BYPASS_ON, EffectCategory, FirmwareGen, find_knob_def, find_model_by_name,
 };
+use nux_audio::nux_sys_ex_commands::{
+    CURRENT_PRESET_BASIC, CURRENT_PRESET_BASIC_RESPONSE_PATTERN as BASIC_HEADER,
+    CURRENT_PRESET_DETAIL_RESPONSE_PATTERN as DETAIL_HEADER, DEVICE_VERSION_REQUEST,
+    DEVICE_VERSION_RESPONSE_PATTERN as VERSION_HEADER, mg30_change_effect_model,
+    mg30_request_preset,
+};
+use nux_audio::preset::Preset;
+use nux_audio::protocol::extract_version;
 use std::time::Duration;
 
 #[cfg(test)]
 mod tests;
 
-/// Header of the device version response (`F0 43 58 10 …`).
-const VERSION_HEADER: [u8; 4] = [0xF0, 0x43, 0x58, 0x10];
-/// Header of the current-preset basic response (preset number + active scene).
-const BASIC_HEADER: [u8; 6] = [0xF0, 0x43, 0x58, 0x70, 0x15, 0x02];
-/// Header of the preset detail response (name, tempo, chain, scenes).
-const DETAIL_HEADER: [u8; 6] = [0xF0, 0x43, 0x58, 0x70, 0x0B, 0x02];
 /// How long to wait for any device response.
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(3);
 /// Highest addressable preset slot (7-bit SysEx data byte).

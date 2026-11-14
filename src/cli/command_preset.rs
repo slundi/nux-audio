@@ -4,8 +4,8 @@
 
 use super::error::CliError;
 use crate::export::{OutputFormat, PresetFile};
-use crate::preset::Preset;
 use crate::session::NuxSession;
+use nux_audio::preset::Preset;
 use std::path::PathBuf;
 
 /// Exit code used when `preset send` is invoked. The write-preset SysEx opcode

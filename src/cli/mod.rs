@@ -12,13 +12,13 @@ mod command_model;
 mod command_preset;
 pub mod error;
 
-use crate::effects::EffectCategory;
 use crate::export::OutputFormat;
 use bpaf::*;
 use command_bypass::parse_bypass_state;
 use command_devices::list as list_devices;
 use command_effect::parse_effect_parameters;
 use error::CliError;
+use nux_audio::effects::EffectCategory;
 use nux_audio::string::{decimal_string_to_vec_u8, hex_string_to_vec_u8};
 use std::path::PathBuf;
 

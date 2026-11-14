@@ -22,6 +22,18 @@ pub fn hex_string_to_vec_u8(s: &str) -> Result<Vec<u8>, NuxAudioError> {
     Ok(bytes)
 }
 
+/// Keep only ASCII alphanumerics, spaces and dashes, then trim surrounding whitespace.
+///
+/// Used to normalize text decoded from device responses (preset names, firmware
+/// version), which may carry NUL padding or stray control bytes.
+pub fn clean_string(s: &str) -> String {
+    let result: String = s
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == ' ' || *c == '-')
+        .collect();
+    result.trim().to_string()
+}
+
 /// Convert a string containing u8 as decimal into a `Vec<u8>`.
 /// Input string examples: `11 255 48 0` ou `11,255,48,0`
 pub fn decimal_string_to_vec_u8(s: &str) -> Result<Vec<u8>, std::num::ParseIntError> {
@@ -54,6 +66,13 @@ mod tests {
         assert!(hex_string_to_vec_u8("0bf043zr").is_err());
         assert!(hex_string_to_vec_u8("0b f0 43 a").is_err());
         assert!(hex_string_to_vec_u8("0b f0 43 zr").is_err());
+    }
+
+    #[test]
+    fn test_clean_string() {
+        assert_eq!(clean_string("  azerty  "), "azerty");
+        assert_eq!(clean_string("Some french: garçon"), "Some french garon");
+        assert_eq!(clean_string(" with null \0 char "), "with null  char");
     }
 
     #[test]

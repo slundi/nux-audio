@@ -1,4 +1,4 @@
-// IR (Impulse Response / Cabinet) models for MG-30
+//! IR (Impulse Response / Cabinet) models for MG-30
 // Reference: ir.rs device observations + effects.yaml
 //
 // Bypass CC: 9

@@ -1,6 +1,7 @@
 //! CLI-level error type for the `nux-cli` binary; wraps domain errors via `#[from]`.
 
-use crate::error::{ExportError, MidiError, NuxError, SessionError};
+use crate::error::{ExportError, MidiError, SessionError};
+use nux_audio::error::NuxAudioError;
 
 /// CLI-level errors for the `nux-cli` binary.
 ///
@@ -24,7 +25,7 @@ pub enum CliError {
     Session(#[from] SessionError),
 
     #[error(transparent)]
-    Parse(#[from] NuxError),
+    Parse(#[from] NuxAudioError),
 
     #[error(transparent)]
     Midi(#[from] MidiError),

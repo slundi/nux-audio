@@ -1,11 +1,24 @@
-//! Low-level library crate that ships with the binary — MIDI utilities, SysEx builders,
-//! and NUX-specific command constants re-exported through the `nux_audio` crate.
+//! Device-independent core of the NUX tooling: everything that is pure data or pure
+//! decoding, with no MIDI I/O.
+//!
+//! - [`nux_sys_ex_commands`]: SysEx request builders and response header patterns.
+//! - [`protocol`]: decoding of device responses not tied to a preset (firmware version).
+//! - [`preset`]: the [`Preset`](preset::Preset) model and its SysEx decoders.
+//! - [`effects`]: effect categories, model/knob catalogs, and catalog lookups.
+//! - [`registry`]: supported-device specifications embedded from `devices_registry.yaml`.
+//! - [`midi`], [`string`], [`error`]: shared helpers and the [`NuxAudioError`](error::NuxAudioError) type.
+//!
+//! The `nux-cli` binary adds MIDI transport, the device session, the CLI and the TUI on top.
 
 #![deny(missing_docs)]
 
+pub mod effects;
 pub mod error;
 pub mod midi;
 pub mod nux_sys_ex_commands;
+pub mod preset;
+pub mod protocol;
+pub mod registry;
 pub mod string;
 
 pub use midi::*;

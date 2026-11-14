@@ -1,4 +1,4 @@
-// EQ models for MG-30
+//! EQ models for MG-30
 // Reference: equalizer.rs device observations + effects.yaml
 //
 // Bypass CC: 4

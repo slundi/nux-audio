@@ -1,8 +1,8 @@
 // Device info query: handshake via the session and display firmware + registry data.
 
 use super::error::CliError;
-use crate::registry::REGISTRY;
 use crate::session::NuxSession;
+use nux_audio::registry::REGISTRY;
 
 pub async fn run(device_name: Option<&str>) -> Result<(), CliError> {
     let session = NuxSession::connect(device_name).await?;

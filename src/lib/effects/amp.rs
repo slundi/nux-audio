@@ -1,4 +1,4 @@
-// AMP models for MG-30 — 25 electric + 3 bass + 2 acoustic = 30 total
+//! AMP models for MG-30 — 25 electric + 3 bass + 2 acoustic = 30 total
 // Reference: amp.rs device observations + effects.yaml
 //
 // Bypass CC: 3

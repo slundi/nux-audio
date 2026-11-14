@@ -1,8 +1,9 @@
-/// Runtime device registry loaded from the embedded `devices_registry.yaml`.
-///
-/// `devices_registry.yaml` is embedded at compile time via `include_str!` so
-/// there is no file-system dependency at runtime.  Edit it to add or modify
-/// supported devices; the change takes effect on the next build.
+//! Runtime device registry loaded from the embedded `devices_registry.yaml`.
+//!
+//! `devices_registry.yaml` is embedded at compile time via `include_str!` so
+//! there is no file-system dependency at runtime.  Edit it to add or modify
+//! supported devices; the change takes effect on the next build.
+
 use serde::Deserialize;
 use std::sync::LazyLock;
 
@@ -39,7 +40,7 @@ pub struct DeviceRegistry {
 
 impl DeviceRegistry {
     fn load() -> Self {
-        let raw = include_str!("../devices_registry.yaml");
+        let raw = include_str!("../../devices_registry.yaml");
         let file: DevicesFile = serde_saphyr::from_str(raw)
             .expect("devices_registry.yaml is embedded at compile time and must be valid YAML");
         Self {

@@ -1,4 +1,4 @@
-// REVERB models for MG-30
+//! REVERB models for MG-30
 // Reference: reverb.rs device observations + effects.yaml
 //
 // Bypass CC: 8

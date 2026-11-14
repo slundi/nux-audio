@@ -48,4 +48,51 @@ pub enum NuxAudioError {
     /// Produced by `SysExTemplate::build` when a `Param` slot has no matching entry in the params map.
     #[error("missing SysEx template parameter '{0}'")]
     MissingTemplateParam(&'static str),
+
+    // ── Device response parsing ───────────────────────────────────────────────
+    /// Produced when a device response is shorter than the decoder requires.
+    #[error("SysEx response too short: {actual} bytes (expected at least {expected})")]
+    ResponseTooShort {
+        /// Minimum length the decoder needs.
+        expected: usize,
+        /// Length actually received.
+        actual: usize,
+    },
+
+    /// Produced when the version response does not contain a recognizable version string.
+    #[error("cannot parse firmware version from '{0}'")]
+    VersionParse(String),
+
+    /// Produced when a text field of a device response is not valid UTF-8.
+    #[error("invalid UTF-8 in device response: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
+
+    /// Produced when a preset name contains a byte outside printable ASCII.
+    #[error("invalid byte 0x{0:02X} in preset name (expected printable ASCII)")]
+    InvalidPresetName(u8),
+
+    // ── Effect catalog lookup ─────────────────────────────────────────────────
+    /// Produced when a response is too short to read effect slot data from.
+    #[error(
+        "SysEx response too short for effect parsing: {actual} bytes (need at least {expected})"
+    )]
+    EffectResponseTooShort {
+        /// Minimum length the decoder needs.
+        expected: usize,
+        /// Length actually received.
+        actual: usize,
+    },
+
+    /// Produced when a byte does not map to any [`EffectCategory`](crate::effects::EffectCategory).
+    #[error("unknown effect category byte 0x{0:02X}")]
+    UnknownEffectCategory(u8),
+
+    /// Produced when a model ID is absent from the category's catalog for this firmware.
+    #[error("unknown model 0x{model_id:02X} for category 0x{category_byte:02X}")]
+    UnknownEffectModel {
+        /// Raw category byte from the response.
+        category_byte: u8,
+        /// Raw model ID from the response.
+        model_id: u8,
+    },
 }

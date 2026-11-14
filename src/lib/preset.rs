@@ -1,7 +1,9 @@
+//! The [`Preset`] model and its decoders for MG-30 preset SysEx responses.
+
 use std::collections::HashMap;
 
 use crate::effects::{EffectCategory, EffectOption};
-use crate::error::NuxError;
+use crate::error::NuxAudioError;
 
 const PRESET_LETTERS: [char; 4] = ['A', 'B', 'C', 'D'];
 
@@ -12,28 +14,43 @@ const PRESET_LETTERS: [char; 4] = ['A', 'B', 'C', 'D'];
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct SceneSnapshot(pub [u8; 3]);
 
+/// A device preset, as decoded from SysEx responses.
+///
+/// Which fields are filled depends on the decoder: the basic response only gives
+/// `number` and `active_scene_number`; the detail response gives the rest.
 #[derive(Default, Clone, Debug)]
 pub struct Preset {
+    /// Slot index (0x00–0x7F); see [`Preset::format_code`] for the display form.
     pub number: u8,
     /// Raw tempo value encoded as `response[143] * 64 + response[144]`.
     /// This is milliseconds-per-beat; convert to BPM with `60_000 / tempo`.
     pub tempo: u16,
     /// Parallel blend level (0–127).
     pub parallel: u8,
+    /// Effect slots in signal-chain order.
     pub effect_order: Vec<EffectCategory>,
+    /// Preset name (printable ASCII, cleaned).
     pub name: String,
+    /// Scene index used by front-ends for editing (0 = A).
     pub scene: u8,
+    /// Scene currently active on the device (0 = A), when known.
     pub active_scene_number: Option<u8>,
     /// Per-scene bypass snapshots (3 scenes on MG-30).
     pub scenes: Vec<SceneSnapshot>,
+    /// Active model per populated slot.
     pub effects: HashMap<EffectCategory, EffectOption>,
 }
 
 impl Preset {
+    /// Display code of this preset's slot (e.g. `"02B"`); see [`Preset::format_code`].
     pub fn get_preset_code(&self) -> String {
         Self::format_code(self.number)
     }
 
+    /// Format a slot index as the device shows it: bank number + letter A–D.
+    ///
+    /// Four presets per bank, zero-padded below bank 10: `0 → "01A"`, `5 → "02B"`,
+    /// `127 → "32D"`.
     pub fn format_code(index: u8) -> String {
         let mut preset_code = String::with_capacity(3);
         let group_number = (index / 4) + 1;
@@ -51,10 +68,10 @@ impl Preset {
     /// Response header: `[0xF0, 0x43, 0x58, 0x70, 0x15, 0x02, ...]`
     ///   - Byte 6 = preset number (0x00–0x7F)
     ///   - Byte 9 = active scene (0=A, 1=B, 2=C)
-    pub fn extract_current_preset_basic_data(response: &[u8]) -> Result<Self, NuxError> {
+    pub fn extract_current_preset_basic_data(response: &[u8]) -> Result<Self, NuxAudioError> {
         const MIN_LEN: usize = 10;
         if response.len() < MIN_LEN {
-            return Err(NuxError::ResponseTooShort {
+            return Err(NuxAudioError::ResponseTooShort {
                 expected: MIN_LEN,
                 actual: response.len(),
             });
@@ -81,10 +98,10 @@ impl Preset {
     /// | 208–210   | Scene 1 on/off bytes                   |
     /// | 211–213   | Scene 2 on/off bytes                   |
     /// | 214–216   | Scene 3 on/off bytes                   |
-    pub fn extract_current_preset_detail_data(response: &[u8]) -> Result<Self, NuxError> {
+    pub fn extract_current_preset_detail_data(response: &[u8]) -> Result<Self, NuxAudioError> {
         const MIN_LEN: usize = 217;
         if response.len() < MIN_LEN {
-            return Err(NuxError::ResponseTooShort {
+            return Err(NuxAudioError::ResponseTooShort {
                 expected: MIN_LEN,
                 actual: response.len(),
             });
@@ -120,7 +137,7 @@ impl Preset {
     ///   - `bytes[n+2]` → second character = `bytes[n+2] / 2 (+ 0x40 if flag set)`
     ///
     /// Parsing stops at a zero byte or end of input.
-    pub fn extract_name(response: &[u8]) -> Result<String, NuxError> {
+    pub fn extract_name(response: &[u8]) -> Result<String, NuxAudioError> {
         let mut name = String::with_capacity(16);
         let mut counter = 0usize;
         while counter < response.len() {
@@ -132,7 +149,7 @@ impl Preset {
             // in preset names. Non-printable ASCII control chars (< 0x20, 0x7F)
             // are treated as end-of-name rather than errors.
             if b > 127 {
-                return Err(NuxError::InvalidPresetName(b));
+                return Err(NuxAudioError::InvalidPresetName(b));
             }
             if b < b' ' || b == 127 {
                 break;
@@ -158,7 +175,7 @@ impl Preset {
 
             counter += 3;
         }
-        Ok(crate::utils::clean_string(&name))
+        Ok(crate::string::clean_string(&name))
     }
 }
 
@@ -186,7 +203,7 @@ mod tests {
         let short = vec![0xF0, 0x43, 0x58, 0x70, 0x15, 0x02, 0x05];
         assert!(matches!(
             Preset::extract_current_preset_basic_data(&short),
-            Err(NuxError::ResponseTooShort { .. })
+            Err(NuxAudioError::ResponseTooShort { .. })
         ));
     }
 
@@ -219,7 +236,7 @@ mod tests {
         let bytes = [0xC0u8, 0x00, 0x00]; // 0xC0 > 127
         assert!(matches!(
             Preset::extract_name(&bytes),
-            Err(NuxError::InvalidPresetName(0xC0))
+            Err(NuxAudioError::InvalidPresetName(0xC0))
         ));
     }
 
@@ -236,7 +253,7 @@ mod tests {
         let short = vec![0u8; 100];
         assert!(matches!(
             Preset::extract_current_preset_detail_data(&short),
-            Err(NuxError::ResponseTooShort { .. })
+            Err(NuxAudioError::ResponseTooShort { .. })
         ));
     }
 

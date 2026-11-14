@@ -1,4 +1,11 @@
-use crate::error::NuxError;
+//! MG-30 effect slots and model catalogs.
+//!
+//! [`EffectCategory`] names the signal-chain slots; each slot's submodule holds a
+//! static `MODELS` catalog of [`EffectOption`]s (model ID, title, knob CCs). The lookup
+//! functions here ([`get_model`], [`find_model_by_name`], [`find_knob_def`], …) filter by
+//! [`FirmwareGen`] and fall back to user-defined models from [`user`].
+
+use crate::error::NuxAudioError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -88,7 +95,7 @@ impl EffectCategory {
     /// no bypass toggle and returns `None`.
     ///
     /// Use [`CC_BYPASS_ON`] (0x7F) to activate and [`CC_BYPASS_OFF`] (0x00) to
-    /// bypass the slot.  Send via [`MidiManager::send_cc`](crate::midi::MidiManager::send_cc).
+    /// bypass the slot.
     pub fn bypass_cc(self) -> Option<u8> {
         match self {
             EffectCategory::Vol => None,
@@ -157,38 +164,58 @@ impl std::str::FromStr for EffectCategory {
     }
 }
 
+/// One effect model in a slot's catalog (e.g. the "Hall" reverb).
 #[derive(Default, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct EffectOption {
     /// Model ID as transmitted in SysEx messages.
     /// IDs marked "confirmed" are from hardware reverse-engineering;
     /// IDs marked "provisional" are inferred from sequential ordering.
     pub id: u8,
+    /// Display name, as shown on the device (matched case-insensitively by name lookups).
     pub title: String,
+    /// Slot byte in the preset detail response when this model is active.
     pub on_byte: u8,
+    /// Slot byte in the preset detail response when this model is bypassed.
     pub off_byte: u8,
+    /// RGB colour (`0xRRGGBB`) of the slot, used by front-ends.
     pub category_color: u32,
+    /// Knob definitions for this model, in device order.
     pub knobs: Vec<KnobDef>,
+    /// Optional per-model RGB accent overriding [`category_color`](Self::category_color).
     pub dominant_color: Option<u32>,
     /// Minimum firmware generation required for this model.
     /// Defaults to `Gen1` (available on all hardware).
     pub min_gen: FirmwareGen,
 }
 
+/// A decoded effect slot: its category and the model(s) found for it.
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct Effect {
+    /// Signal-chain slot.
     pub category: EffectCategory,
+    /// Base slot byte for the bypassed state, from which per-model `off_byte`s derive
+    /// (e.g. Wah: `0x40 + model_id`). Not filled by the built-in decoders.
     pub start_off_byte: u8,
+    /// Base slot byte for the active state. Not filled by the built-in decoders.
     pub start_on_byte: u8,
+    /// RGB colour (`0xRRGGBB`) of the slot, used by front-ends.
     pub category_color: u32,
+    /// Matching models; [`extract_effects`] fills exactly one.
     pub options: Vec<EffectOption>,
 }
 
+/// Static definition of one knob of an effect model.
 #[derive(Default, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct KnobDef {
+    /// Stable lowercase identifier used on the CLI (e.g. `"gain"`).
     pub id: String,
+    /// Label shown on the device (e.g. `"GAIN"`).
     pub title: String,
-    pub range_start: Option<u8>, // Always 0
+    /// Lowest accepted value; always `Some(0)` in the built-in catalogs.
+    pub range_start: Option<u8>,
+    /// Highest accepted value, enforced before sending; `None` means the MIDI maximum (127).
     pub range_end: Option<u8>,
+    /// MIDI CC number that controls this knob in real time.
     pub ctrl: u8,
 }
 
@@ -199,7 +226,9 @@ pub struct KnobDef {
 /// `knob_def.id.clone()`.
 #[derive(Clone, PartialEq, Debug)]
 pub struct KnobState {
+    /// [`KnobDef::id`] of the knob this value belongs to.
     pub def_id: String,
+    /// Current value as reported by the device.
     pub value: u8,
 }
 
@@ -244,13 +273,13 @@ pub fn get_model(
 /// Byte offsets are provisional and must be verified against hardware captures:
 ///   `CATEGORY_OFFSET` — byte encoding the effect slot (maps to `EffectCategory`)
 ///   `MODEL_ID_OFFSET` — byte encoding the selected model within that slot
-pub fn extract_effects(response: &[u8], fw_gen: FirmwareGen) -> Result<Effect, NuxError> {
+pub fn extract_effects(response: &[u8], fw_gen: FirmwareGen) -> Result<Effect, NuxAudioError> {
     // TODO: verify these offsets from hardware SysEx captures
     const CATEGORY_OFFSET: usize = 6;
     const MODEL_ID_OFFSET: usize = 7;
 
     if response.len() <= MODEL_ID_OFFSET {
-        return Err(NuxError::EffectResponseTooShort {
+        return Err(NuxAudioError::EffectResponseTooShort {
             expected: MODEL_ID_OFFSET + 1,
             actual: response.len(),
         });
@@ -260,12 +289,13 @@ pub fn extract_effects(response: &[u8], fw_gen: FirmwareGen) -> Result<Effect, N
     let model_id = response[MODEL_ID_OFFSET];
 
     let category = EffectCategory::from_u8(category_byte)
-        .ok_or(NuxError::UnknownEffectCategory(category_byte))?;
+        .ok_or(NuxAudioError::UnknownEffectCategory(category_byte))?;
 
-    let option = get_model(category, model_id, fw_gen).ok_or(NuxError::UnknownEffectModel {
-        category_byte,
-        model_id,
-    })?;
+    let option =
+        get_model(category, model_id, fw_gen).ok_or(NuxAudioError::UnknownEffectModel {
+            category_byte,
+            model_id,
+        })?;
 
     Ok(Effect {
         category,
@@ -282,11 +312,11 @@ pub fn extract_effects(response: &[u8], fw_gen: FirmwareGen) -> Result<Effect, N
 ///   - bytes at offset `3k+1,3k+2` → big-endian u16 divided by 2 → category value
 ///
 /// Requires the full (unstripped) SysEx response including the `F0 43` header.
-pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxError> {
+pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxAudioError> {
     const SLICE_START: usize = 147;
     const SLICE_END: usize = 165;
     if data.len() < SLICE_END {
-        return Err(NuxError::EffectResponseTooShort {
+        return Err(NuxAudioError::EffectResponseTooShort {
             expected: SLICE_END,
             actual: data.len(),
         });
@@ -299,7 +329,7 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxErro
             // Single-byte slot at positions 0, 3, 6, 9, 12, 15
             match EffectCategory::from_u8(sliced[i]) {
                 Some(ec) => effects.push(ec),
-                None => return Err(NuxError::UnknownEffectCategory(sliced[i])),
+                None => return Err(NuxAudioError::UnknownEffectCategory(sliced[i])),
             }
             i += 1;
         } else {
@@ -307,7 +337,7 @@ pub fn extract_effects_order(data: &[u8]) -> Result<Vec<EffectCategory>, NuxErro
             let combined = u16::from_be_bytes([sliced[i], sliced[i + 1]]) / 2;
             match EffectCategory::from_u8(combined as u8) {
                 Some(ec) => effects.push(ec),
-                None => return Err(NuxError::UnknownEffectCategory(combined as u8)),
+                None => return Err(NuxAudioError::UnknownEffectCategory(combined as u8)),
             }
             i += 2;
         }

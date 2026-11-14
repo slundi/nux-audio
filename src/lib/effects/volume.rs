@@ -1,4 +1,4 @@
-// VOL / Send-Return slot for MG-30
+//! VOL / Send-Return slot for MG-30
 // Reference: effects.yaml
 //
 // Bypass CC: 10 (Send/Return)

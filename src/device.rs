@@ -1,6 +1,8 @@
-use crate::error::NuxError;
-use crate::preset::Preset;
+//! Hardware discovery: [`Device`] (a supported NUX unit and its MIDI port indices)
+//! and [`Device::detect`], which scans midir ports against the device registry.
+
 use midir::{MidiInput, MidiOutput};
+use nux_audio::preset::Preset;
 use std::collections::HashMap;
 use tracing::error;
 
@@ -74,7 +76,7 @@ impl Device {
     /// Device definitions live in `devices.toml` — add or update entries there
     /// rather than editing this function.
     fn extract_supported(value: &str) -> Option<(Manufacturer, String, u8)> {
-        use crate::registry::REGISTRY;
+        use nux_audio::registry::REGISTRY;
         REGISTRY
             .match_port(value)
             .map(|spec| (Manufacturer::Nux, spec.model_code.clone(), spec.device_id))
@@ -160,30 +162,12 @@ impl Device {
 pub struct ControllerState {
     pub device: Device,
     pub device_connected: bool,
-    /// Firmware version as a semver tuple — parse from `extract_version` with `semver_to_tuple`.
+    /// Firmware version as a semver tuple — parse from
+    /// [`extract_version`](nux_audio::protocol::extract_version) with `semver_to_tuple`.
     pub device_version: (u8, u8, u8),
     pub active: bool,
     pub presets: Vec<Preset>,
     pub is_fetching_preset: bool,
-}
-
-/// Extract version string from a SysEx response. SysEx framing bytes must have been removed.
-pub fn extract_version(response: &[u8]) -> Result<String, NuxError> {
-    if response.len() < 6 {
-        return Err(NuxError::ResponseTooShort {
-            expected: 6,
-            actual: response.len(),
-        });
-    }
-    let version_bytes = &response[4..response.len() - 1];
-    let version = String::from_utf8(version_bytes.to_vec())?;
-    let version = version.trim_end_matches('\0');
-    let version = version.trim().to_string();
-
-    if let Some(value) = version.split_once("MG-30") {
-        return Ok(crate::utils::clean_string(value.0));
-    }
-    Err(NuxError::VersionParse(version))
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-// WAH models for MG-30
+//! WAH models for MG-30
 // Reference: wah.rs device observations + effects.yaml
 //
 // on_byte = 2 * model_id  (device byte when slot is active)

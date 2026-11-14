@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::ExportError;
-use crate::preset::Preset;
+use nux_audio::preset::Preset;
 
 // ── Schema migration ──────────────────────────────────────────────────────────
 
@@ -243,8 +243,8 @@ impl PresetFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::effects::{EffectCategory, EffectOption, KnobDef};
-    use crate::preset::{Preset, SceneSnapshot};
+    use nux_audio::effects::{EffectCategory, EffectOption, KnobDef};
+    use nux_audio::preset::{Preset, SceneSnapshot};
     use std::collections::HashMap;
 
     fn sample_preset() -> Preset {

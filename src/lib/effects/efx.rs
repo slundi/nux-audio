@@ -1,4 +1,4 @@
-// EFX (pre-amp drive/boost/fuzz) models for MG-30
+//! EFX (pre-amp drive/boost/fuzz) models for MG-30
 // Reference: efx.rs device observations + effects.yaml
 //
 // Bypass CC: 2

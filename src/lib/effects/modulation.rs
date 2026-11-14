@@ -1,4 +1,4 @@
-// MODULATION models for MG-30
+//! MODULATION models for MG-30
 // Reference: modulation.rs device observations + effects.yaml
 //
 // Bypass CC: 6
