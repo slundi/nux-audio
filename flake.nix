@@ -20,25 +20,6 @@
     flake-utils.lib.eachDefaultSystem (system: let
       overlays = [(import rust-overlay)];
       pkgs = import nixpkgs {inherit system overlays;};
-      extensions = with pkgs.vscode-extensions; [
-        rust-lang.rust-analyzer
-        tamasfe.even-better-toml
-        jnoortheen.nix-ide
-        mkhl.direnv
-        vadimcn.vscode-lldb
-        redhat.vscode-yaml
-        # ryanluker.vscode-coverage-gutters
-        # Note: If swellaby is not in your nixpkgs channel,
-        # you may need to use a community overlay or skip it here.
-        # swellaby.vscode-rust-test-adapter
-        # vscode-extensions.nefrob.vscode-just-syntax
-      ];
-      # Create a custom VSCodium with these extensions
-      custom-codium = pkgs.vscode-with-extensions.override {
-        vscode = pkgs.vscodium;
-        vscodeExtensions = extensions;
-      };
-
       # Define the rust toolchain from your toml
       rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
@@ -73,7 +54,6 @@
           git-cliff # Changelog generator from conventional commits
           mold # Fast linker (referenced in .cargo/config.toml)
           nil # Nix language server (referenced in .vscode/settings.json)
-          custom-codium
 
           pkg-config
           alsa-lib
@@ -83,7 +63,7 @@
         # This runs when the shell starts
         shellHook = ''
           echo "Rust Dev Shell Loaded"
-          echo "Tip: Run 'codium .' to start coding with all extensions pre-installed."
+          echo "Tip: open the folder in your system VSCodium; it will offer the extensions from .vscode/extensions.json."
           # Automatically install hooks if .git exists
           if [ -d .git ] && command -v prek >/dev/null; then
             prek install

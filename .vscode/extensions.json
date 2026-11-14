@@ -6,7 +6,6 @@
         "mkhl.direnv", // Auto-loads your Nix shell inside VS Code
         "vadimcn.vscode-lldb", // Debugging support
         "redhat.vscode-yaml",
-        "rust-lang.rust-analyzer",
         "nefrob.vscode-just-syntax",
         "swellaby.vscode-rust-test-adapter",
         "ryanluker.vscode-coverage-gutters" // Inline coverage gutters from lcov.info
