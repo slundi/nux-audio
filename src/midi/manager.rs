@@ -1,30 +1,15 @@
-//! MIDI transport: the [`MidiSend`] abstraction, the midir-backed [`MidiManager`],
-//! and the async [`MidiDispatcher`] that routes device responses to tokio tasks.
+//! [`MidiManager`]: midir-backed port enumeration, connection, and rate-limited sending.
 
+use super::dispatcher::{DISPATCHER_CAPACITY, MidiDispatcher};
+use super::{SYSEX_MANUFACTURER, frame_sysex};
 use crate::error::MidiError;
 use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection, MidiOutputPort};
-use nux_audio::{SYSEX_END, SYSEX_START};
 use std::time::Duration;
 use tokio::sync::broadcast;
 
-// ── MidiSend trait ────────────────────────────────────────────────────────────
-
-/// Abstraction over MIDI send operations.
-///
-/// Implemented by [`MidiManager`] for real hardware and by `MockMidi` (test-only, `#[cfg(test)]`)
-/// so that command logic can be unit-tested without a physical device.
-///
-/// `send_cc` is async because it enforces a minimum inter-command delay
-/// (see [`MIN_CC_INTERVAL`]) via [`tokio::time::sleep`], which must not block
-/// the runtime worker.
-pub trait MidiSend {
-    fn send_sysex(&mut self, data: &[u8]) -> Result<(), MidiError>;
-    fn send_cc(
-        &mut self,
-        control: u8,
-        value: u8,
-    ) -> impl std::future::Future<Output = Result<(), MidiError>> + Send;
-}
+/// Minimum delay enforced between successive `send_cc` calls.
+/// Protects device firmware from being overwhelmed by rapid CC floods.
+const MIN_CC_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
 
 /// Reject a port `index` that is not below `available`.
 fn check_port_index(
@@ -52,63 +37,6 @@ fn connect_error<T>(port: &str) -> impl FnOnce(midir::ConnectError<T>) -> MidiEr
     }
 }
 
-/// Frame `data` as a SysEx message: `F0 <prefix…> <data…> F7`.
-fn frame_sysex(prefix: &[u8], data: &[u8]) -> Vec<u8> {
-    let mut buffer = Vec::with_capacity(prefix.len() + data.len() + 2);
-    buffer.push(SYSEX_START);
-    buffer.extend_from_slice(prefix);
-    buffer.extend_from_slice(data);
-    buffer.push(SYSEX_END);
-    buffer
-}
-
-/// Manufacturer byte prepended by [`MidiManager::send_sysex`].
-const SYSEX_MANUFACTURER: u8 = 0x43;
-
-/// Buffer size for the broadcast channel that fans out incoming MIDI messages.
-///
-/// Sized to absorb a full bank dump (128 presets × several SysEx packets each)
-/// with headroom in case a subscriber is briefly slow. Previously 64, which
-/// could silently overflow during multi-preset fetches.
-const DISPATCHER_CAPACITY: usize = 256;
-
-/// Minimum delay enforced between successive `send_cc` calls.
-/// Protects device firmware from being overwhelmed by rapid CC floods.
-const MIN_CC_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
-
-/// Outcome of processing one `broadcast::Receiver::recv()` result inside
-/// [`MidiDispatcher::await_response`]. Extracted so the pattern-match branches —
-/// especially the silent-drop-on-lag path — can be unit-tested without needing
-/// to race a real broadcast channel.
-enum RecvStep {
-    /// Terminate the loop and return this result to the caller.
-    Return(Result<Vec<u8>, crate::error::NuxError>),
-    /// Discard this message and keep waiting.
-    Continue,
-}
-
-/// Classify a `recv()` result against `pattern`, emitting a stderr warning
-/// when tokio reports lag (broadcast overflow → silent message drops).
-fn classify_recv(result: Result<Vec<u8>, broadcast::error::RecvError>, pattern: &[u8]) -> RecvStep {
-    match result {
-        Ok(msg) if msg.starts_with(pattern) => RecvStep::Return(Ok(msg)),
-        Ok(_) => RecvStep::Continue,
-        Err(broadcast::error::RecvError::Lagged(n)) => {
-            // The receiver fell behind by `n` messages; those are lost.
-            // Warn the user because a lag during a bank dump means silently
-            // missing preset data downstream.
-            eprintln!(
-                "warning: MIDI dispatcher lagged, dropped {n} message(s) — \
-                 consider increasing DISPATCHER_CAPACITY or slowing bulk queries"
-            );
-            RecvStep::Continue
-        }
-        Err(broadcast::error::RecvError::Closed) => {
-            RecvStep::Return(Err(crate::error::NuxError::ChannelClosed))
-        }
-    }
-}
-
 /// Async wait until `min_interval` has elapsed since `last`. No-op if `last`
 /// is `None` or the interval has already passed.
 ///
@@ -119,51 +47,6 @@ async fn wait_rate_limit(last: Option<std::time::Instant>, min_interval: Duratio
         let elapsed = l.elapsed();
         if elapsed < min_interval {
             tokio::time::sleep(min_interval - elapsed).await;
-        }
-    }
-}
-
-/// Async MIDI response dispatcher backed by a `tokio::sync::broadcast` channel.
-///
-/// Bridges the synchronous midir callback into async tokio consumers.
-/// Multiple tasks can subscribe independently; each receives every message.
-pub struct MidiDispatcher {
-    tx: broadcast::Sender<Vec<u8>>,
-}
-
-impl MidiDispatcher {
-    fn new(tx: broadcast::Sender<Vec<u8>>) -> Self {
-        Self { tx }
-    }
-
-    /// Subscribe to receive all incoming MIDI messages.
-    pub fn subscribe(&self) -> broadcast::Receiver<Vec<u8>> {
-        self.tx.subscribe()
-    }
-
-    /// Wait asynchronously for the first message whose bytes start with `pattern`.
-    ///
-    /// Returns [`crate::error::NuxError::ResponseTimeout`] if no matching message arrives within
-    /// `timeout`, and [`crate::error::NuxError::ChannelClosed`] if the sender is dropped.
-    pub async fn await_response(
-        &self,
-        pattern: &[u8],
-        timeout: Duration,
-    ) -> Result<Vec<u8>, crate::error::NuxError> {
-        let mut rx = self.tx.subscribe();
-        let pattern = pattern.to_vec();
-        let result = tokio::time::timeout(timeout, async move {
-            loop {
-                match classify_recv(rx.recv().await, &pattern) {
-                    RecvStep::Return(r) => return r,
-                    RecvStep::Continue => continue,
-                }
-            }
-        })
-        .await;
-        match result {
-            Ok(inner) => inner,
-            Err(_elapsed) => Err(crate::error::NuxError::ResponseTimeout),
         }
     }
 }
@@ -215,8 +98,7 @@ impl MidiManager {
     /// Connect to MIDI ports and return a channel receiver for incoming messages.
     ///
     /// Every raw MIDI message received on `port_in` is forwarded to the returned
-    /// `Receiver<Vec<u8>>`.  This is the preferred way to connect when the caller
-    /// needs to read device responses (e.g. the version handshake).
+    /// `Receiver<Vec<u8>>`.
     pub fn connect_with_channel(
         &mut self,
         port_in: usize,
@@ -371,61 +253,6 @@ impl Drop for MidiManager {
     }
 }
 
-impl MidiSend for MidiManager {
-    fn send_sysex(&mut self, data: &[u8]) -> Result<(), MidiError> {
-        self.send_sysex(data)
-    }
-
-    async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), MidiError> {
-        self.send_cc(control, value).await
-    }
-}
-
-// ── MockMidi (test only) ──────────────────────────────────────────────────────
-
-/// In-memory MIDI sink for unit tests.
-///
-/// Records every outgoing message so tests can assert which bytes were sent.
-/// Set `should_fail = true` to simulate a connection error.
-#[cfg(test)]
-#[derive(Default)]
-pub struct MockMidi {
-    /// Raw bytes of every message sent (CC: `[0xB0, ctrl, val]`;
-    /// SysEx: `[0xF0, 0x43, …data…, 0xF7]`).
-    pub sent: Vec<Vec<u8>>,
-    pub should_fail: bool,
-}
-
-#[cfg(test)]
-impl MockMidi {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-#[cfg(test)]
-impl MidiSend for MockMidi {
-    fn send_sysex(&mut self, data: &[u8]) -> Result<(), MidiError> {
-        if self.should_fail {
-            return Err(midir::SendError::Other("mock send failure").into());
-        }
-        self.sent.push(frame_sysex(&[SYSEX_MANUFACTURER], data));
-        Ok(())
-    }
-
-    async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), MidiError> {
-        if self.should_fail {
-            return Err(midir::SendError::Other("mock send failure").into());
-        }
-        // Mirrors MidiManager::send_cc validation
-        if value > 127 {
-            return Err(MidiError::CcValueOutOfRange(value));
-        }
-        self.sent.push(vec![0xB0, control, value]);
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,51 +292,6 @@ mod tests {
         handle.await.unwrap();
     }
 
-    /// Matching message → terminate with Ok.
-    #[test]
-    fn classify_recv_matching_message_returns_ok() {
-        let step = classify_recv(Ok(vec![0xF0, 0x43, 0x58, 0x99]), &[0xF0, 0x43, 0x58]);
-        match step {
-            RecvStep::Return(Ok(msg)) => assert_eq!(msg, vec![0xF0, 0x43, 0x58, 0x99]),
-            _ => panic!("expected Return(Ok(...)), got other"),
-        }
-    }
-
-    /// Non-matching message → keep polling.
-    #[test]
-    fn classify_recv_unrelated_message_continues() {
-        let step = classify_recv(Ok(vec![0xB0, 0x22, 0x50]), &[0xF0, 0x43, 0x58]);
-        matches!(step, RecvStep::Continue).then_some(()).unwrap();
-    }
-
-    /// Lag → must continue (regression: previously silent, now also warns).
-    /// The behavioural invariant is that lag is NOT a hard failure.
-    #[test]
-    fn classify_recv_lagged_continues_not_returns() {
-        let step = classify_recv(
-            Err(broadcast::error::RecvError::Lagged(7)),
-            &[0xF0, 0x43, 0x58],
-        );
-        assert!(
-            matches!(step, RecvStep::Continue),
-            "Lagged must not cause await_response to return — it drops n messages and keeps polling"
-        );
-    }
-
-    /// Channel closed → surface as `ChannelClosed` so the caller knows the
-    /// dispatcher is dead (as opposed to just idle).
-    #[test]
-    fn classify_recv_closed_returns_channel_closed() {
-        let step = classify_recv(
-            Err(broadcast::error::RecvError::Closed),
-            &[0xF0, 0x43, 0x58],
-        );
-        match step {
-            RecvStep::Return(Err(crate::error::NuxError::ChannelClosed)) => {}
-            _ => panic!("expected Return(Err(ChannelClosed))"),
-        }
-    }
-
     #[test]
     fn check_port_index_bounds() {
         assert!(check_port_index("input", 0, 1).is_ok());
@@ -525,19 +307,6 @@ mod tests {
     }
 
     #[test]
-    fn frame_sysex_with_and_without_prefix() {
-        assert_eq!(
-            frame_sysex(&[SYSEX_MANUFACTURER], &[0x58, 0x01]),
-            vec![0xF0, 0x43, 0x58, 0x01, 0xF7]
-        );
-        assert_eq!(
-            frame_sysex(&[], &[0x43, 0x58]),
-            vec![0xF0, 0x43, 0x58, 0xF7]
-        );
-        assert_eq!(frame_sysex(&[], &[]), vec![0xF0, 0xF7]);
-    }
-
-    #[test]
     fn connect_error_keeps_port_and_kind() {
         let err = connect_error("NUX MG-30")(midir::ConnectError::new(
             midir::ConnectErrorKind::InvalidPort,
@@ -548,20 +317,6 @@ mod tests {
             MidiError::Connect { ref port, kind: midir::ConnectErrorKind::InvalidPort }
                 if port == "NUX MG-30"
         ));
-    }
-
-    #[tokio::test]
-    async fn mock_midi_returns_typed_errors() {
-        let mut mock = MockMidi::new();
-        assert!(matches!(
-            mock.send_cc(1, 200).await,
-            Err(MidiError::CcValueOutOfRange(200))
-        ));
-
-        mock.should_fail = true;
-        assert!(matches!(mock.send_sysex(&[0x01]), Err(MidiError::Send(_))));
-        assert!(matches!(mock.send_cc(1, 1).await, Err(MidiError::Send(_))));
-        assert!(mock.sent.is_empty());
     }
 
     /// Hardware-free checks on a real backend; skipped when MIDI can't initialize

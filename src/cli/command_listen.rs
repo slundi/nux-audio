@@ -5,6 +5,8 @@
 //! human-readable label; unknown messages are printed as raw hex only.
 //! A `---` separator is printed between messages.
 
+use super::error::CliError;
+use crate::error::MidiError;
 use midir::MidiInput;
 use tokio::sync::mpsc;
 
@@ -37,7 +39,7 @@ fn describe_cc(cc: u8, value: u8) -> Option<String> {
         return Some(format!("CC {slot} {state}  (val={value:#04X})"));
     }
 
-    // Knob assignments from MIDI_CC_assignements.md
+    // Knob assignments from MIDI_CC_assignments.md
     let knob_label = match cc {
         0x0B => Some("Wah knob 1"),
         0x0C => Some("Wah knob 2"),
@@ -186,48 +188,36 @@ fn print_message(msg: &[u8]) {
 
 // ── Command entry point ───────────────────────────────────────────────────────
 
-pub async fn run(device_name: &Option<String>) {
-    let (device, port_in, _port_out) = match super::resolve_ports(device_name) {
-        Some(p) => p,
-        None => return,
-    };
+pub async fn run(device_name: Option<&str>) -> Result<(), CliError> {
+    // Passive listener: resolve the device but skip the session handshake.
+    let (device, port_in, _port_out) = crate::session::resolve_device(device_name)?;
 
-    println!("Listening on {} — press Ctrl+C to stop", device.model);
-    println!("---");
-
-    let input = match MidiInput::new("nux-listen") {
-        Ok(i) => i,
-        Err(e) => {
-            eprintln!("MIDI init error: {e}");
-            return;
-        }
-    };
-
+    let input = MidiInput::new("nux-listen").map_err(MidiError::from)?;
     let ports = input.ports();
-    let port = match ports.get(port_in) {
-        Some(p) => p,
-        None => {
-            eprintln!("MIDI input port {port_in} not found");
-            return;
-        }
-    };
+    let port = ports.get(port_in).ok_or(MidiError::PortOutOfRange {
+        direction: "input",
+        index: port_in,
+        available: ports.len(),
+    })?;
 
     let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
-    let _conn = match input.connect(
-        port,
-        "nux-listen",
-        move |_stamp, msg, _| {
-            let _ = tx.send(msg.to_vec());
-        },
-        (),
-    ) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Cannot open MIDI input: {e}");
-            return;
-        }
-    };
+    let _conn = input
+        .connect(
+            port,
+            "nux-listen",
+            move |_stamp, msg, _| {
+                let _ = tx.send(msg.to_vec());
+            },
+            (),
+        )
+        .map_err(|err| MidiError::Connect {
+            port: device.name.clone(),
+            kind: err.kind(),
+        })?;
+
+    println!("Listening on {} — press Ctrl+C to stop", device.model);
+    println!("---");
 
     loop {
         tokio::select! {
@@ -240,4 +230,5 @@ pub async fn run(device_name: &Option<String>) {
             }
         }
     }
+    Ok(())
 }

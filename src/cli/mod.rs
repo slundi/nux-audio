@@ -1,4 +1,7 @@
 // CLI entry point: defines `Cli`, `Commands`, the command router, and shared helpers.
+//
+// Commands are thin front-ends over `crate::session::NuxSession`: parse arguments,
+// call the session, print the result. Errors bubble up as `CliError`.
 
 mod command_bypass;
 mod command_devices;
@@ -9,23 +12,26 @@ mod command_model;
 mod command_preset;
 pub mod error;
 
-use crate::device::{Device, extract_version};
-use crate::effects::FirmwareGen;
+use crate::effects::EffectCategory;
 use crate::export::OutputFormat;
-use crate::midi::{MidiDispatcher, MidiManager};
 use bpaf::*;
 use command_bypass::parse_bypass_state;
 use command_devices::list as list_devices;
 use command_effect::parse_effect_parameters;
-use nux_audio::nux_sys_ex_commands::DEVICE_VERSION_REQUEST;
+use error::CliError;
 use nux_audio::string::{decimal_string_to_vec_u8, hex_string_to_vec_u8};
 use std::path::PathBuf;
-use std::time::Duration;
 
 // Re-export types that appear in the public Commands enum or tests
-pub use command_bypass::BypassState;
-pub use command_effect::{EffectParameter, KnobIdentifier, parse_effect_params_from_string};
+pub use crate::session::{BypassState, EffectParameter, KnobIdentifier};
+pub use command_effect::parse_effect_params_from_string;
 pub use command_preset::{GetPresetArgs, PresetAction, SendPresetArgs};
+
+/// Parse an effect slot name (`"amp"`, `"reverb"`, …) given on the command line.
+fn parse_category(name: &str) -> Result<EffectCategory, CliError> {
+    name.parse::<EffectCategory>()
+        .map_err(|()| CliError::UnknownCategory(name.to_owned()))
+}
 
 #[derive(Clone)]
 pub struct Cli {
@@ -40,8 +46,10 @@ impl Cli {
         self.format
     }
 
-    pub async fn process(self) {
+    /// Run the parsed command. Errors are returned for `main` to report once.
+    pub async fn process(self) -> Result<(), CliError> {
         let format = self.output_format();
+        let device_name = self.device_name.as_deref();
         match self.command {
             Commands::Devices => {
                 println!("Listing available devices...");
@@ -56,28 +64,28 @@ impl Cli {
                         port.name
                     );
                 }
+                Ok(())
             }
-            Commands::Info => command_info::run(&self.device_name).await,
-            Commands::Preset { action } => {
-                command_preset::run(&self.device_name, action, format).await
-            }
+            Commands::Info => command_info::run(device_name).await,
+            Commands::Preset { action } => command_preset::run(device_name, action, format).await,
             Commands::Effect {
                 ref effect,
                 ref parameters,
-            } => command_effect::run(&self.device_name, effect, parameters).await,
+            } => command_effect::run(device_name, effect, parameters).await,
             Commands::Bypass {
                 ref category,
                 state,
-            } => command_bypass::run(&self.device_name, category, state).await,
+            } => command_bypass::run(device_name, category, state).await,
             Commands::Model {
                 ref category,
                 ref model,
-            } => command_model::run(&self.device_name, category, model).await,
-            Commands::Listen => command_listen::run(&self.device_name).await,
+            } => command_model::run(device_name, category, model).await,
+            Commands::Listen => command_listen::run(device_name).await,
             Commands::Tui => {
                 if let Err(e) = tokio::task::block_in_place(crate::ui::run_tui) {
                     eprintln!("TUI error: {e}");
                 }
+                Ok(())
             }
             Commands::Raw { ref data, decimal } => {
                 eprintln!(
@@ -96,6 +104,7 @@ impl Cli {
                         Err(e) => eprintln!("{e}"),
                     }
                 }
+                Ok(())
             }
         }
     }
@@ -311,135 +320,6 @@ pub fn cli_parser() -> OptionParser<Cli> {
     .to_options()
     .version(env!("CARGO_PKG_VERSION"))
     .descr("Guitar multi-effects manager via MIDI")
-}
-
-const VERSION_HEADER: [u8; 4] = [0xF0, 0x43, 0x58, 0x10];
-const VERSION_TIMEOUT: Duration = Duration::from_secs(3);
-
-/// All state resulting from a successful device connection and firmware version detection.
-struct DeviceSession {
-    device: Device,
-    manager: MidiManager,
-    dispatcher: MidiDispatcher,
-    fw_gen: FirmwareGen,
-    version_str: String,
-}
-
-/// Connect to the NUX device, query firmware version, and detect the hardware generation.
-///
-/// Must be called before sending any other SysEx or MIDI CC messages so that
-/// version-dependent catalog lookups (e.g. Gen2-only effect models) use the right table.
-///
-/// Returns `None` on any failure (error already printed to stderr).
-async fn connect_and_detect(device_name: &Option<String>) -> Option<DeviceSession> {
-    let (device, port_in, port_out) = resolve_ports(device_name)?;
-
-    let mut manager = match MidiManager::new() {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Cannot create MIDI manager: {e}");
-            return None;
-        }
-    };
-
-    let dispatcher = match manager.connect_with_dispatcher(port_in, port_out) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("Cannot connect to {}: {e}", device.model);
-            return None;
-        }
-    };
-
-    if let Err(e) = manager.send_sysex(&DEVICE_VERSION_REQUEST) {
-        eprintln!("Failed to send version request: {e}");
-        return None;
-    }
-
-    let version_resp = match dispatcher
-        .await_response(&VERSION_HEADER, VERSION_TIMEOUT)
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Version query failed: {e}");
-            return None;
-        }
-    };
-
-    let version_str = match extract_version(&version_resp) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Could not parse firmware version: {e}");
-            return None;
-        }
-    };
-
-    let fw_gen = FirmwareGen::from_version_str(&version_str);
-    Some(DeviceSession {
-        device,
-        manager,
-        dispatcher,
-        fw_gen,
-        version_str,
-    })
-}
-
-/// Detect the target device and resolve its (port_in, port_out) MIDI port indices.
-///
-/// Honours `--device` / `--port` selection from the CLI.  Prints a user-facing
-/// error and returns `None` when no suitable device can be found.
-fn resolve_ports(device_name: &Option<String>) -> Option<(Device, usize, usize)> {
-    let mut devices = Device::detect();
-
-    let device = if let Some(name) = device_name {
-        let n = name.to_lowercase();
-        match devices
-            .iter()
-            .position(|d| d.name.to_lowercase().contains(&n) || d.model.to_lowercase() == n)
-        {
-            Some(i) => devices.swap_remove(i),
-            None => {
-                eprintln!("Device '{name}' not found. Use `nux devices` to list ports.");
-                return None;
-            }
-        }
-    } else {
-        match devices.len() {
-            0 => {
-                eprintln!("No supported Nux device detected. Is the device connected?");
-                return None;
-            }
-            1 => devices.swap_remove(0),
-            _ => {
-                eprintln!(
-                    "Multiple devices found — specify one with -d <model>: {}",
-                    devices
-                        .iter()
-                        .map(|d| d.model.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-                return None;
-            }
-        }
-    };
-
-    let port_in = match device.inputs.values().copied().next() {
-        Some(p) => p,
-        None => {
-            eprintln!("No MIDI input port for {}", device.model);
-            return None;
-        }
-    };
-    let port_out = match device.outputs.values().copied().next() {
-        Some(p) => p,
-        None => {
-            eprintln!("No MIDI output port for {}", device.model);
-            return None;
-        }
-    };
-
-    Some((device, port_in, port_out))
 }
 
 fn send_raw(data: &[u8]) {
@@ -669,6 +549,15 @@ mod tests {
         } else {
             panic!("Expected Raw command");
         }
+    }
+
+    #[test]
+    fn test_parse_category() {
+        assert_eq!(parse_category("amp").unwrap(), EffectCategory::Amp);
+        assert!(matches!(
+            parse_category("kazoo"),
+            Err(CliError::UnknownCategory(name)) if name == "kazoo"
+        ));
     }
 
     #[test]

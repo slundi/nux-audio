@@ -1,20 +1,21 @@
-// Device info query: send VERSION_REQUEST SysEx and display firmware + registry data.
+// Device info query: handshake via the session and display firmware + registry data.
 
+use super::error::CliError;
 use crate::registry::REGISTRY;
+use crate::session::NuxSession;
 
-pub async fn run(device_name: &Option<String>) {
-    let session = match super::connect_and_detect(device_name).await {
-        Some(s) => s,
-        None => return,
-    };
+pub async fn run(device_name: Option<&str>) -> Result<(), CliError> {
+    let session = NuxSession::connect(device_name).await?;
+    let device = session.device();
 
-    println!("Device:       {}", session.device.name);
-    println!("Model:        {}", session.device.model);
-    println!("Device ID:    0x{:02X}", session.device.device_id);
-    println!("Firmware:     {}", session.version_str);
-    println!("Hardware gen: {:?}", session.fw_gen);
-    if let Some(spec) = REGISTRY.by_device_id(session.device.device_id) {
+    println!("Device:       {}", device.name);
+    println!("Model:        {}", device.model);
+    println!("Device ID:    0x{:02X}", device.device_id);
+    println!("Firmware:     {}", session.firmware());
+    println!("Hardware gen: {:?}", session.fw_gen());
+    if let Some(spec) = REGISTRY.by_device_id(device.device_id) {
         println!("Presets:      {}", spec.preset_count);
         println!("Signal chain: {}", spec.signal_chain.join(" → "));
     }
+    Ok(())
 }

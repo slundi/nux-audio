@@ -1,14 +1,12 @@
 // Preset management: fetch from device and send preset files.
+//
+// Device I/O goes through `NuxSession`; this file handles paths and output.
 
+use super::error::CliError;
 use crate::export::{OutputFormat, PresetFile};
 use crate::preset::Preset;
-use nux_audio::nux_sys_ex_commands::{CURRENT_PRESET_BASIC, mg30_request_preset};
+use crate::session::NuxSession;
 use std::path::PathBuf;
-use std::time::Duration;
-
-const BASIC_HEADER: [u8; 6] = [0xF0, 0x43, 0x58, 0x70, 0x15, 0x02];
-const DETAIL_HEADER: [u8; 6] = [0xF0, 0x43, 0x58, 0x70, 0x0B, 0x02];
-const TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Exit code used when `preset send` is invoked. The write-preset SysEx opcode
 /// has not been reverse-engineered yet, so the command cannot complete.
@@ -33,7 +31,11 @@ pub struct SendPresetArgs {
     pub filename: PathBuf,
 }
 
-pub async fn run(device_name: &Option<String>, action: PresetAction, format: OutputFormat) {
+pub async fn run(
+    device_name: Option<&str>,
+    action: PresetAction,
+    format: OutputFormat,
+) -> Result<(), CliError> {
     match action {
         PresetAction::Show => show(device_name, format).await,
         PresetAction::Get(args) => get(device_name, args, format).await,
@@ -98,63 +100,20 @@ fn default_output_path(
     PathBuf::from(format!("{basename}.{ext}"))
 }
 
-async fn get(device_name: &Option<String>, args: GetPresetArgs, format: OutputFormat) {
-    let mut session = match super::connect_and_detect(device_name).await {
-        Some(s) => s,
-        None => return,
-    };
+async fn get(
+    device_name: Option<&str>,
+    args: GetPresetArgs,
+    format: OutputFormat,
+) -> Result<(), CliError> {
+    let mut session = NuxSession::connect(device_name).await?;
 
-    // Resolve target slot: explicit `--slot` wins; otherwise query the device for
-    // whichever preset is currently loaded (also gives us the active scene).
-    let (target_slot, active_scene) = match args.slot {
-        Some(slot) => {
-            if slot > 0x7F {
-                eprintln!("error: slot {slot} out of range (0–127)");
-                return;
-            }
-            (slot, None)
-        }
-        None => match query_current_preset_basic(&mut session).await {
-            Some((slot, scene)) => (slot, Some(scene)),
-            None => return,
-        },
-    };
+    // Explicit `--slot` wins; otherwise the session reads whichever preset is
+    // currently loaded (which also gives us the active scene).
+    let preset = session.fetch_preset(args.slot).await?;
 
-    if let Err(e) = session
-        .manager
-        .send_sysex(&mg30_request_preset(target_slot))
-    {
-        eprintln!("Failed to send preset detail request: {e}");
-        return;
-    }
-    let detail_resp = match session
-        .dispatcher
-        .await_response(&DETAIL_HEADER, TIMEOUT)
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("No detail preset response: {e}");
-            return;
-        }
-    };
-
-    let mut preset = match Preset::extract_current_preset_detail_data(&detail_resp) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Failed to parse detail data: {e}");
-            return;
-        }
-    };
-    preset.active_scene_number = active_scene;
-
-    let file = PresetFile::from_preset(&preset, &session.device.model);
+    let file = PresetFile::from_preset(&preset, &session.device().model);
     let path = default_output_path(args.filename, &preset, format);
-
-    if let Err(e) = file.write_to_file(&path, format) {
-        eprintln!("Failed to write preset file: {e}");
-        return;
-    }
+    file.write_to_file(&path, format)?;
 
     println!(
         "Saved preset {} (\"{}\") to {}",
@@ -162,77 +121,30 @@ async fn get(device_name: &Option<String>, args: GetPresetArgs, format: OutputFo
         preset.name,
         path.display()
     );
+    Ok(())
 }
 
-/// Query the device for the currently active preset (slot number + active scene).
-///
-/// Returns `None` on any failure (error already printed to stderr).
-async fn query_current_preset_basic(session: &mut super::DeviceSession) -> Option<(u8, u8)> {
-    if let Err(e) = session.manager.send_sysex(&CURRENT_PRESET_BASIC) {
-        eprintln!("Failed to send preset basic request: {e}");
-        return None;
-    }
-    let basic_resp = match session
-        .dispatcher
-        .await_response(&BASIC_HEADER, TIMEOUT)
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("No basic preset response: {e}");
-            return None;
-        }
-    };
-    let basic = match Preset::extract_current_preset_basic_data(&basic_resp) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Failed to parse basic preset data: {e}");
-            return None;
-        }
-    };
-    Some((basic.number, basic.active_scene_number.unwrap_or(0)))
-}
-
-async fn show(device_name: &Option<String>, format: OutputFormat) {
-    let mut session = match super::connect_and_detect(device_name).await {
-        Some(s) => s,
-        None => return,
-    };
-
-    println!("Firmware:  {} ({:?})", session.version_str, session.fw_gen);
-
-    // Step 1: basic response → preset number + active scene
-    if let Err(e) = session.manager.send_sysex(&CURRENT_PRESET_BASIC) {
-        eprintln!("Failed to send preset basic request: {e}");
-        return;
-    }
-    let basic_resp = match session
-        .dispatcher
-        .await_response(&BASIC_HEADER, TIMEOUT)
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("No basic preset response: {e}");
-            return;
-        }
-    };
-    println!("Raw basic response ({} bytes):", basic_resp.len());
-    for (i, chunk) in basic_resp.chunks(16).enumerate() {
+/// Print `bytes` as a 16-per-line hex dump with decimal offsets.
+fn print_hex_dump(label: &str, bytes: &[u8]) {
+    println!("Raw {label} response ({} bytes):", bytes.len());
+    for (i, chunk) in bytes.chunks(16).enumerate() {
         print!("  [{:03}] ", i * 16);
         for b in chunk {
             print!("{b:02X} ");
         }
         println!();
     }
+}
 
-    let basic = match Preset::extract_current_preset_basic_data(&basic_resp) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Failed to parse basic preset data: {e}");
-            return;
-        }
-    };
+async fn show(device_name: Option<&str>, format: OutputFormat) -> Result<(), CliError> {
+    let mut session = NuxSession::connect(device_name).await?;
+
+    println!("Firmware:  {} ({:?})", session.firmware(), session.fw_gen());
+
+    // Step 1: basic response → preset number + active scene
+    let basic_resp = session.current_preset_raw().await?;
+    print_hex_dump("basic", &basic_resp);
+    let basic = Preset::extract_current_preset_basic_data(&basic_resp)?;
 
     let scene_letter = match basic.active_scene_number {
         Some(0) => 'A',
@@ -249,24 +161,7 @@ async fn show(device_name: &Option<String>, format: OutputFormat) {
     println!("Scene:   S{scene_letter}");
 
     // Step 2: detail response → name, tempo, effect order, scenes
-    if let Err(e) = session
-        .manager
-        .send_sysex(&mg30_request_preset(basic.number))
-    {
-        eprintln!("Failed to send preset detail request: {e}");
-        return;
-    }
-    let detail_resp = match session
-        .dispatcher
-        .await_response(&DETAIL_HEADER, TIMEOUT)
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("No detail preset response: {e}");
-            return;
-        }
-    };
+    let detail_resp = session.preset_detail_raw(basic.number).await?;
 
     // GEN2: BPM at bytes 144 (sync state) and 147 (value)
     // Formula: BPM = (byte_147 + 128) / 2
@@ -281,47 +176,34 @@ async fn show(device_name: &Option<String>, format: OutputFormat) {
         }
     }
 
-    println!("Raw detail response ({} bytes):", detail_resp.len());
-    for (i, chunk) in detail_resp.chunks(16).enumerate() {
-        print!("  [{:03}] ", i * 16);
-        for b in chunk {
-            print!("{b:02X} ");
-        }
-        println!();
-    }
+    print_hex_dump("detail", &detail_resp);
 
-    match Preset::extract_current_preset_detail_data(&detail_resp) {
-        Ok(mut preset) => {
-            preset.active_scene_number = basic.active_scene_number;
-            println!("Name:    {}", preset.name);
-            let bpm = 60_000u32.checked_div(preset.tempo as u32).unwrap_or(0);
-            println!("Tempo:   {bpm} BPM (raw: {})", preset.tempo);
-            println!("Parallel:{}", preset.parallel);
-            let order: Vec<&str> = preset.effect_order.iter().map(|e| e.as_str()).collect();
-            println!("Chain:   {}", order.join(" → "));
-            for (i, scene) in preset.scenes.iter().enumerate() {
-                println!(
-                    "Scene {}:  {:02X} {:02X} {:02X}",
-                    i + 1,
-                    scene.0[0],
-                    scene.0[1],
-                    scene.0[2]
-                );
-            }
-            // Honor --json/--yaml: emit a machine-readable dump of the parsed preset.
-            let label = match format {
-                OutputFormat::Yaml => "yaml",
-                OutputFormat::Json => "json",
-            };
-            println!("--- serialized ({label}) ---");
-            let file = PresetFile::from_preset(&preset, &session.device.model);
-            match file.to_string_fmt(format) {
-                Ok(s) => println!("{s}"),
-                Err(e) => eprintln!("Failed to serialize preset: {e}"),
-            }
-        }
-        Err(e) => eprintln!("Failed to parse detail data: {e}"),
+    let mut preset = Preset::extract_current_preset_detail_data(&detail_resp)?;
+    preset.active_scene_number = basic.active_scene_number;
+    println!("Name:    {}", preset.name);
+    let bpm = 60_000u32.checked_div(preset.tempo as u32).unwrap_or(0);
+    println!("Tempo:   {bpm} BPM (raw: {})", preset.tempo);
+    println!("Parallel:{}", preset.parallel);
+    let order: Vec<&str> = preset.effect_order.iter().map(|e| e.as_str()).collect();
+    println!("Chain:   {}", order.join(" → "));
+    for (i, scene) in preset.scenes.iter().enumerate() {
+        println!(
+            "Scene {}:  {:02X} {:02X} {:02X}",
+            i + 1,
+            scene.0[0],
+            scene.0[1],
+            scene.0[2]
+        );
     }
+    // Honor --json/--yaml: emit a machine-readable dump of the parsed preset.
+    let label = match format {
+        OutputFormat::Yaml => "yaml",
+        OutputFormat::Json => "json",
+    };
+    println!("--- serialized ({label}) ---");
+    let file = PresetFile::from_preset(&preset, &session.device().model);
+    println!("{}", file.to_string_fmt(format)?);
+    Ok(())
 }
 
 #[cfg(test)]

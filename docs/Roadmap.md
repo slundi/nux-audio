@@ -5,7 +5,8 @@
 * [x] **Core Data Structures**: `Manufacturer`, `Device` (model, device_id, MIDI port maps), `Preset` (number, name, scene, effect_order, effects map), `EffectOption` / `KnobDef` / `KnobState`, `ControllerState` — all implemented in `src/`.
 * [x] **Device Registry**: `devices.toml` embedded at compile time and parsed at startup into a `static REGISTRY: LazyLock<DeviceRegistry>` (`src/registry.rs`). Each entry carries `device_id`, `model_code`, `preset_count`, `midi_port_prefix`, and `signal_chain`. `Device::extract_supported()` now delegates to `REGISTRY.match_port()` (longest-prefix match) instead of hardcoded branches. Effect model catalogs remain compiled-in Rust; `effects.yaml` is still reference-only.
 * [x] **Hardware abstraction**: `MidiManager` with `midir` for port enumeration, connect, send, disconnect on Linux/ALSA. `Device::detect()` matches MIDI port names against 6 supported Nux device models.
-* [x] **Handshake Protocol**: `nux info` uses `Device::detect()` to find the device, connects via `MidiManager::connect_with_channel()` (returns `Receiver<Vec<u8>>`), sends `DEVICE_VERSION_REQUEST`, and waits up to 3 s in a `spawn_blocking` task for the `[0xF0, 0x43, 0x58, 0x10]` response. Firmware version is parsed by `extract_version()` and displayed alongside model, device ID, preset count, and signal chain from the registry.
+* [x] **Handshake Protocol**: `NuxSession::connect()` selects the device (`select_device` / `device_ports`), opens a `MidiConnection`, sends `DEVICE_VERSION_REQUEST` and waits up to 3 s for the `[0xF0, 0x43, 0x58, 0x10]` response via `MidiTransport::request_sysex` (subscribes before sending, so a fast reply cannot be missed). Firmware version is parsed by `extract_version()`; `nux info` displays it alongside model, device ID, preset count, and signal chain from the registry.
+* [x] **Session service** (`src/session/`): `NuxSession<T: MidiTransport>` owns transport + device + firmware generation and exposes `set_bypass`, `set_knob`, `set_model`, `fetch_preset`, `current_preset[_raw]`, `preset_detail_raw`, all returning a typed `SessionError`. CLI commands are thin wrappers (parse → session → print) returning `CliError`; `nux-cli` now exits with status 1 on error. The TUI can reuse the same service (Phase 5 wiring pending).
 
 ## Phase 2: Communication Engine
 
@@ -127,7 +128,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 * [x] **Error Handling**: `thiserror` used throughout. Some panics remain (e.g. `midir_test`).
   - `MidiManager` / `MidiSend` return a typed `MidiError` (no more `Box<dyn Error>`); preset file I/O returns `ExportError`, so `export.rs` no longer depends on `cli::error::CliError`. `CliError` wraps both via `#[from]`.
 * [~] **Logging**: `tracing` + `tracing-subscriber` configured; XDG log file placement done in `configure_logger`.
-* [ ] **Testing**: Mock MIDI backend for CI/CD testing without physical hardware.
+* [x] **Testing**: Mock MIDI backend for CI/CD testing without physical hardware — `MockMidi` implements `MidiTransport` with a FIFO of canned device responses; all session operations (handshake, bypass, knobs, models, preset fetch) are unit-tested through it.
 * [ ] **External Mapping Support**: Allow users to load custom YAML files for unsupported pedals.
 * [ ] **Documentation**: Document the SysEx/CC mapping process for community contributors.
 

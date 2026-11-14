@@ -1,12 +1,14 @@
 //! Domain-level error types for the nux-cli binary.
 //!
 //! - [`NuxError`]: SysEx response parsing, effect catalog lookups, byte utilities.
-//! - [`MidiError`]: MIDI backend setup, port connection and message sending.
+//! - [`MidiError`]: MIDI backend setup, port connection, sending and response waiting.
 //! - [`ExportError`]: preset file (de)serialization, schema versioning and file I/O.
+//! - [`SessionError`]: device selection and device operations (`crate::session`).
 //!
 //! CLI-specific errors live in `crate::cli::error` and wrap these via `#[from]`.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// Domain-level errors for the nux-cli binary.
 ///
@@ -49,17 +51,6 @@ pub enum NuxError {
 
     #[error("unknown model 0x{model_id:02X} for category 0x{category_byte:02X}")]
     UnknownEffectModel { category_byte: u8, model_id: u8 },
-
-    // ── MIDI CC ───────────────────────────────────────────────────────────────
-    #[error("effect slot {0:?} has no bypass CC (Vol slot has no bypass toggle)")]
-    NoBypassCc(String),
-
-    // ── Async dispatch ────────────────────────────────────────────────────────
-    #[error("no response from device within the timeout period")]
-    ResponseTimeout,
-
-    #[error("MIDI dispatcher channel closed unexpectedly")]
-    ChannelClosed,
 }
 
 /// Errors raised by the MIDI transport layer (`crate::midi`).
@@ -100,6 +91,88 @@ pub enum MidiError {
     /// A CC value above the 7-bit MIDI limit was refused before sending.
     #[error("CC value {0} exceeds MIDI maximum of 127")]
     CcValueOutOfRange(u8),
+
+    /// No message matching the expected response header arrived in time.
+    #[error("no response from device within {0:?}")]
+    Timeout(Duration),
+
+    /// The incoming-message channel was closed (input connection dropped).
+    #[error("MIDI dispatcher channel closed unexpectedly")]
+    ChannelClosed,
+}
+
+/// Errors raised by the device session service (`crate::session`).
+#[derive(thiserror::Error, Debug)]
+pub enum SessionError {
+    // ── Device selection ──────────────────────────────────────────────────────
+    #[error("no supported Nux device detected — is the device connected?")]
+    NoDeviceFound,
+
+    #[error("multiple devices found — specify one with -d <model>: {0}")]
+    MultipleDevices(String),
+
+    #[error("device '{0}' not found — use `nux devices` to list ports")]
+    DeviceNotFound(String),
+
+    #[error("no MIDI {direction} port for {model}")]
+    MissingPort {
+        /// `"input"` or `"output"`.
+        direction: &'static str,
+        model: String,
+    },
+
+    // ── Transport ─────────────────────────────────────────────────────────────
+    #[error("cannot connect to {model}: {source}")]
+    Connect {
+        model: String,
+        #[source]
+        source: MidiError,
+    },
+
+    /// A device operation failed at the MIDI level; `operation` says which one.
+    #[error("{operation} failed: {source}")]
+    Midi {
+        operation: &'static str,
+        #[source]
+        source: MidiError,
+    },
+
+    /// A device response could not be decoded; `response` says which one.
+    #[error("cannot parse {response}: {source}")]
+    Parse {
+        response: &'static str,
+        #[source]
+        source: NuxError,
+    },
+
+    // ── Catalog / argument validation ─────────────────────────────────────────
+    #[error(
+        "knob '{knob}' not found in {category} catalog — use a CC number directly (e.g. 22=80)"
+    )]
+    UnknownKnob {
+        category: &'static str,
+        knob: String,
+    },
+
+    #[error("value {value} out of range for {category} knob '{knob}' (0..={max})")]
+    KnobValueOutOfRange {
+        category: &'static str,
+        knob: String,
+        value: u8,
+        max: u8,
+    },
+
+    #[error("the '{0}' slot has no bypass toggle")]
+    NoBypassCc(&'static str),
+
+    #[error("model '{model}' not found in {category} catalog")]
+    UnknownModel {
+        category: &'static str,
+        model: String,
+    },
+
+    #[error("preset slot {0} out of range (0–127)")]
+    SlotOutOfRange(u8),
 }
 
 /// Errors raised while exporting or importing preset files (`crate::export`).
@@ -175,6 +248,33 @@ mod tests {
             err.to_string(),
             "cannot connect to MIDI port 'NUX MG-30': invalid port"
         );
+    }
+
+    #[test]
+    fn test_midi_error_timeout_message_includes_duration() {
+        let err = MidiError::Timeout(Duration::from_secs(3));
+        assert_eq!(err.to_string(), "no response from device within 3s");
+    }
+
+    #[test]
+    fn test_session_error_keeps_operation_and_source() {
+        use std::error::Error;
+
+        let err = SessionError::Midi {
+            operation: "version query",
+            source: MidiError::Timeout(Duration::from_secs(3)),
+        };
+        assert_eq!(
+            err.to_string(),
+            "version query failed: no response from device within 3s"
+        );
+        assert!(err.source().is_some());
+
+        let missing = SessionError::MissingPort {
+            direction: "input",
+            model: "MG-30".to_owned(),
+        };
+        assert_eq!(missing.to_string(), "no MIDI input port for MG-30");
     }
 
     #[test]

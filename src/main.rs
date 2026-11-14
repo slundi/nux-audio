@@ -8,6 +8,7 @@ pub mod export;
 pub mod midi;
 pub mod preset;
 pub mod registry;
+pub mod session;
 pub mod storage;
 pub mod ui;
 pub mod utils;
@@ -41,7 +42,10 @@ pub fn configure_logger(xdg: &xdg::BaseDirectories) {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().len() > 1 {
         let cli = cli::cli_parser().run();
-        cli.process().await;
+        if let Err(e) = cli.process().await {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
         return Ok(());
     }
     let xdg_dirs = xdg::BaseDirectories::new();

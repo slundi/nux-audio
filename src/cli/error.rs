@@ -1,36 +1,27 @@
 //! CLI-level error type for the `nux-cli` binary; wraps domain errors via `#[from]`.
 
-use crate::error::{ExportError, MidiError, NuxError};
+use crate::error::{ExportError, MidiError, NuxError, SessionError};
 
 /// CLI-level errors for the `nux-cli` binary.
+///
+/// Every command returns `Result<(), CliError>`; `main` prints the error once
+/// and exits with a non-zero status.
 #[derive(thiserror::Error, Debug)]
 pub enum CliError {
-    #[error("no supported Nux device detected — is the device connected?")]
-    NoDeviceFound,
+    #[error(
+        "unknown effect category '{0}' — try: wah, comp, efx, amp, eq, gate, mod, delay, reverb, ir, vol"
+    )]
+    UnknownCategory(String),
 
-    #[error("multiple devices found — specify one with -d <model>: {0}")]
-    MultipleDevices(String),
+    #[error("invalid hex model ID '{0}'")]
+    InvalidModelId(String),
 
-    #[error("device '{0}' not found — use `nux devices` to list ports")]
-    DeviceNotFound(String),
+    /// Some of a multi-parameter command failed (each failure was already printed).
+    #[error("{failed} of {total} parameter(s) failed")]
+    PartialFailure { failed: usize, total: usize },
 
-    #[error("no MIDI input port for {0}")]
-    NoMidiInput(String),
-
-    #[error("no MIDI output port for {0}")]
-    NoMidiOutput(String),
-
-    #[error("cannot create MIDI manager: {0}")]
-    MidiSetup(String),
-
-    #[error("cannot connect to {device}: {detail}")]
-    Connection { device: String, detail: String },
-
-    #[error("failed to send message: {0}")]
-    SendError(String),
-
-    #[error("timeout: no response from device within {0} seconds")]
-    Timeout(u64),
+    #[error(transparent)]
+    Session(#[from] SessionError),
 
     #[error(transparent)]
     Parse(#[from] NuxError),
@@ -40,9 +31,6 @@ pub enum CliError {
 
     #[error(transparent)]
     Export(#[from] ExportError),
-
-    #[error("internal task error: {0}")]
-    TaskJoin(String),
 }
 
 #[cfg(test)]
@@ -58,5 +46,18 @@ mod tests {
         let export: CliError = ExportError::Serialize("bad".to_owned()).into();
         assert!(matches!(export, CliError::Export(_)));
         assert_eq!(export.to_string(), "cannot serialize preset: bad");
+
+        let session: CliError = SessionError::NoDeviceFound.into();
+        assert!(matches!(session, CliError::Session(_)));
+        assert_eq!(session.to_string(), SessionError::NoDeviceFound.to_string());
+    }
+
+    #[test]
+    fn test_partial_failure_message() {
+        let err = CliError::PartialFailure {
+            failed: 1,
+            total: 3,
+        };
+        assert_eq!(err.to_string(), "1 of 3 parameter(s) failed");
     }
 }
