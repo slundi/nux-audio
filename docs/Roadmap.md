@@ -121,10 +121,13 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
 * [x] 6.4 **Live Board tab**: full-screen 11-slot grid, one column per effect, active/inactive state, scene bar.
 * [x] 6.7 **About tab**: project info (name, version, repo) and full key-bindings reference table.
 * [x] 6.5 **Overlays**: device picker (`d`), looper (`l`), drum machine (`D`). Nerd Font status icon (󰣱/󰣲/spinner) in tab bar; icon legend in About tab.
-* [x] 6.6 **Get/Send**: `g` pulls device preset to local library; `s` pushes selected local preset to device slot.
+* [~] 6.6 **Get/Send**: `g` pulls the device's current preset into the local library; `s` (send) is not possible yet.
   - Conflict popup (`[O]verride` / `[N]o` / `[R]ename+timestamp`) when slot already exists in library.
   - Transient status messages in status bar (auto-clears after ~3 s).
-  - MIDI data currently mocked; real SysEx/CC integration is Phase 7.
+  - [x] Real device I/O: the TUI talks to a `session::worker` task over channels (`SessionCommand` → `SessionEvent`), so device round-trips never block the UI. Device picker connects for real (spinner + busy label while connecting, model + firmware in the tab bar, error on failure); `g` fetches the real current preset.
+  - [ ] `s`: blocked on the write-preset SysEx (same as CLI `preset send`); currently reports "not supported" and leaves the library untouched.
+  - [ ] Looper / drum overlays still local-only (status bar shows a "UI only — not sent to device" banner while they are open).
+  - [ ] Live device updates (knob turns / preset changes pushed by the pedal) — `MidiConnection::subscribe` exists, not yet surfaced as events.
 * [x] 6.8 **Mouse support**: tab-bar clicks, preset-list row click + scroll, chain-panel slot click, live-board slot/scene click, device picker click + scroll, drum pattern click + scroll, conflict popup O/N/R click zones.
 
 ## Phase 7: Community & Extensibility

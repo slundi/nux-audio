@@ -4,6 +4,7 @@
 //! TUI. Consumed by event handlers in [`super::app`] and renderers in
 //! [`super::render`].
 
+use crate::session::worker::DeviceSummary;
 use crate::storage::LibraryEntry;
 
 // ── Status icons (Nerd Fonts) ─────────────────────────────────────────────────
@@ -15,14 +16,12 @@ pub const ICON_ONLINE: &str = "󰣲";
 /// Braille spinner frames shown when an operation is in progress.
 pub const SPINNER_FRAMES: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
 
-/// Persistent status-bar indicator warning that the TUI's device data is mock.
+/// Status-bar warning shown while an overlay that does not talk to the device yet
+/// (looper, drum machine) is open, so users don't expect the pedal to react.
 ///
-/// The ratatui TUI does not yet exchange MIDI messages with the device
-/// (roadmap phase 6). Every "Online" state and preset shown is synthetic —
-/// this banner keeps that fact visible so users don't act on stale/fake data.
-///
-/// Remove once real MIDI is wired into the event loop.
-pub const MOCK_MIDI_BANNER: &str = "[MOCK MIDI — phase 6] ";
+/// Device connection and preset fetch are real; remove this once the looper and
+/// drum SysEx are wired through the session.
+pub const UI_ONLY_BANNER: &str = "[UI only — not sent to device] ";
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
 
@@ -59,13 +58,12 @@ pub struct ConflictState {
 
 // ── Operation status ──────────────────────────────────────────────────────────
 
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum OperationStatus {
     #[default]
     Offline,
     Online,
-    /// A MIDI operation is in progress. `label` describes it (e.g. "Fetching presets…").
-    #[allow(dead_code)]
+    /// A device operation is in progress. `label` describes it (e.g. "Fetching preset…").
     Busy {
         label: String,
     },
@@ -73,9 +71,15 @@ pub enum OperationStatus {
 
 // ── Device info ───────────────────────────────────────────────────────────────
 
-pub struct DeviceInfo {
-    pub model: String,
-    pub fw_version: String,
+/// The connected device, as reported by the session worker.
+pub type DeviceInfo = DeviceSummary;
+
+/// Text shown at the right of the tab bar (shared by render and mouse hit-testing).
+pub fn device_label(info: Option<&DeviceInfo>) -> String {
+    match info {
+        Some(info) => format!(" {} {}", info.model, info.firmware),
+        None => " offline".to_owned(),
+    }
 }
 
 // ── Looper state ──────────────────────────────────────────────────────────────

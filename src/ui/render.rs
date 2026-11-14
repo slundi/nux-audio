@@ -10,7 +10,8 @@ use ratatui::{
 
 use super::app::App;
 use super::state::{
-    ICON_OFFLINE, ICON_ONLINE, MOCK_MIDI_BANNER, OperationStatus, Overlay, SPINNER_FRAMES, Tab,
+    ICON_OFFLINE, ICON_ONLINE, OperationStatus, Overlay, SPINNER_FRAMES, Tab, UI_ONLY_BANNER,
+    device_label,
 };
 use super::{
     overlay_conflict, overlay_device, overlay_drum, overlay_help, overlay_looper, tab_about,
@@ -56,10 +57,7 @@ fn render_tab_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             Color::Yellow,
         ),
     };
-    let device_label = match &app.device_info {
-        Some(info) => format!(" {} fw{}", info.model, info.fw_version),
-        None => " offline".to_owned(),
-    };
+    let device_label = device_label(app.device_info.as_ref());
     // Width: icon(1) + space(1) + label.
     let right_width = 2 + device_label.len() as u16;
     let tab_width = area.width.saturating_sub(right_width);
@@ -87,10 +85,10 @@ fn render_tab_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 }
 
 fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    // Reserve the right edge for the persistent "MOCK MIDI" banner so users are
-    // never surprised by synthetic device state. Everything else (transient
-    // messages, key hints) is rendered on the left half.
-    let banner_width = MOCK_MIDI_BANNER.len() as u16;
+    // While an overlay that does not reach the device is open, reserve the right
+    // edge for the "UI only" banner. Messages and key hints use the rest.
+    let banner = ui_only_overlay(app).then_some(UI_ONLY_BANNER);
+    let banner_width = banner.map_or(0, |text| text.chars().count() as u16);
     let [left_area, banner_area] =
         Layout::horizontal([Constraint::Min(0), Constraint::Length(banner_width)]).areas(area);
 
@@ -101,6 +99,14 @@ fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
         frame.render_widget(
             Line::from(Span::styled(
                 format!(" {msg}"),
+                Style::default().fg(Color::Yellow),
+            )),
+            left_area,
+        );
+    } else if let OperationStatus::Busy { label } = &app.operation_status {
+        frame.render_widget(
+            Line::from(Span::styled(
+                format!(" {label}"),
                 Style::default().fg(Color::Yellow),
             )),
             left_area,
@@ -127,51 +133,94 @@ fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
         );
     }
 
-    frame.render_widget(
-        Line::from(Span::styled(
-            MOCK_MIDI_BANNER,
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )),
-        banner_area,
-    );
+    if let Some(text) = banner {
+        frame.render_widget(
+            Line::from(Span::styled(
+                text,
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            banner_area,
+        );
+    }
+}
+
+/// Whether the active overlay is UI-only (its actions are not sent to the device).
+fn ui_only_overlay(app: &App) -> bool {
+    matches!(app.active_overlay, Some(Overlay::Looper | Overlay::Drum))
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::state::DeviceInfo;
     use super::*;
     use ratatui::{Terminal, backend::TestBackend};
 
-    /// The mock-midi banner constant must clearly say it's mock data.
-    /// Anchors the invariant so a future refactor can't accidentally empty it.
-    #[test]
-    fn mock_midi_banner_is_labeled() {
-        assert!(MOCK_MIDI_BANNER.contains("MOCK"));
-        assert!(!MOCK_MIDI_BANNER.trim().is_empty());
+    /// Render the full app at 100×20 and return the status row (last line).
+    fn status_row(app: &App) -> String {
+        let backend = TestBackend::new(100, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| render(f, app)).unwrap();
+        let buf = terminal.backend().buffer();
+        let last_row_y = buf.area().height - 1;
+        (0..buf.area().width)
+            .map(|x| buf[(x, last_row_y)].symbol())
+            .collect()
     }
 
-    /// End-to-end render assertion: the full app render must place the mock
-    /// banner text somewhere in the status row.
     #[test]
-    fn render_places_mock_banner_in_status_row() {
+    fn ui_only_banner_is_labeled() {
+        assert!(UI_ONLY_BANNER.contains("not sent to device"));
+    }
+
+    /// Device status and presets are real now: no banner on the main screens.
+    #[test]
+    fn no_banner_without_ui_only_overlay() {
         let app = App::new();
-        // Height 5 so the layout has: 1 tab_row + 3 content + 1 status_row.
-        let backend = TestBackend::new(80, 5);
+        assert!(!status_row(&app).contains("UI only"));
+    }
+
+    #[test]
+    fn banner_shown_for_looper_and_drum_overlays() {
+        for overlay in [Overlay::Looper, Overlay::Drum] {
+            let mut app = App::new();
+            app.active_overlay = Some(overlay);
+            let row = status_row(&app);
+            assert!(
+                row.contains("UI only"),
+                "{overlay:?}: status row missing banner: {row:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn busy_label_replaces_key_hints() {
+        let mut app = App::new();
+        app.operation_status = OperationStatus::Busy {
+            label: "Fetching preset…".to_owned(),
+        };
+        let row = status_row(&app);
+        assert!(row.contains("Fetching preset"), "{row:?}");
+        assert!(!row.contains("q:quit"), "{row:?}");
+    }
+
+    #[test]
+    fn tab_bar_shows_connected_device() {
+        let mut app = App::new();
+        app.device_info = Some(DeviceInfo {
+            model: "MG-30".to_owned(),
+            firmware: "v602".to_owned(),
+            fw_gen: None,
+        });
+        let backend = TestBackend::new(100, 20);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|f| render(f, &app)).unwrap();
-
         let buf = terminal.backend().buffer();
-        // The status row is the last line of the buffer.
-        let last_row_y = buf.area().height - 1;
-        let mut row = String::new();
-        for x in 0..buf.area().width {
-            row.push_str(buf[(x, last_row_y)].symbol());
-        }
-        assert!(
-            row.contains("MOCK"),
-            "status row missing MOCK banner: {row:?}"
-        );
+        let first_row: String = (0..buf.area().width)
+            .map(|x| buf[(x, 0)].symbol())
+            .collect();
+        assert!(first_row.contains("MG-30 v602"), "{first_row:?}");
     }
 }

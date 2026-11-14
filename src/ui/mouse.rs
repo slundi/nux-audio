@@ -64,10 +64,7 @@ impl App {
 
     fn handle_mouse_tab_click(&mut self, col: u16, tab_row: Rect) {
         // Mirror the right_width computation in render_tab_bar.
-        let device_label_len = match &self.device_info {
-            Some(info) => format!(" {} fw{}", info.model, info.fw_version).len(),
-            None => " offline".len(),
-        };
+        let device_label_len = super::state::device_label(self.device_info.as_ref()).len();
         let right_width = (2 + device_label_len) as u16;
         let tabs_width = tab_row.width.saturating_sub(right_width);
 

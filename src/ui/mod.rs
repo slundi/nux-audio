@@ -14,6 +14,7 @@ mod overlay_drum;
 mod overlay_help;
 mod overlay_looper;
 mod render;
+mod session_link;
 mod state;
 mod tab_about;
 mod tab_liveboard;

@@ -17,6 +17,10 @@ use nux_audio::effects::{CC_BYPASS_OFF, CC_BYPASS_ON, EffectCategory};
 use nux_audio::preset::Preset;
 use std::time::Duration;
 
+pub mod worker;
+
+#[cfg(test)]
+mod fixtures;
 #[cfg(test)]
 mod tests;
 

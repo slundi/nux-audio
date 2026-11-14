@@ -1,8 +1,9 @@
-//! Application state struct, key-event handlers, actions, and event loop.
+//! Application state struct, key-event handlers, and event loop.
 //!
 //! Types are defined in [`super::state`].
 //! Mouse handlers live in [`super::mouse`].
 //! Render functions live in [`super::render`].
+//! Device actions and session events live in [`super::session_link`].
 
 use std::io;
 use std::time::{Duration, Instant};
@@ -10,15 +11,16 @@ use std::time::{Duration, Instant};
 /// Lifetime of a transient status-bar message.
 const STATUS_MESSAGE_LIFETIME: Duration = Duration::from_secs(3);
 
-use chrono::Utc;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, backend::CrosstermBackend, layout::Rect};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::storage::{Config, LibraryEntry, PresetLibrary, Storage};
+use crate::session::worker::{SessionCommand, SessionEvent, spawn_worker};
+use crate::storage::{Config, PresetLibrary, Storage};
 
 use super::action::GlobalAction;
 use super::render::render;
@@ -65,6 +67,8 @@ pub struct App {
     pub config: Config,
     /// `pub(crate)` so that the mouse handler module can call `save_library`.
     pub(crate) storage: Storage,
+    /// Command channel to the session worker; `None` when no worker runs (tests).
+    pub(crate) session_tx: Option<UnboundedSender<SessionCommand>>,
 }
 
 impl App {
@@ -95,6 +99,7 @@ impl App {
             status_message: None,
             config,
             storage,
+            session_tx: None,
         }
     }
 
@@ -228,14 +233,8 @@ impl App {
                     .get(self.device_picker.selected)
                     .cloned()
                 {
-                    self.device_info = Some(DeviceInfo {
-                        model: model.clone(),
-                        fw_version: "?.?.?".into(),
-                    });
-                    self.operation_status = OperationStatus::Online;
-                    self.library = self.storage.load_library(&model);
-                    self.preset_selected = 0;
                     self.active_overlay = None;
+                    self.connect_to(model);
                 }
             }
             _ => {}
@@ -395,86 +394,6 @@ impl App {
         }
     }
 
-    // ── Device actions ────────────────────────────────────────────────────────
-
-    /// Pull the current preset from the connected device into the local library.
-    ///
-    /// If a local entry already exists for the same device slot, the conflict
-    /// overlay is opened to let the user choose Override (`o`) / No (`n`) / Rename (`r`).
-    fn action_get_from_device(&mut self) {
-        if self.operation_status != OperationStatus::Online {
-            self.set_status("Not connected — press d to select a device");
-            return;
-        }
-
-        let fw_gen = self
-            .device_info
-            .as_ref()
-            .map(|d| d.fw_version.clone())
-            .unwrap_or_else(|| "Gen2".to_owned());
-
-        // Build a placeholder entry (real data would come via async MIDI fetch).
-        let incoming = LibraryEntry {
-            slot: Some(0),
-            firmware_gen: fw_gen,
-            modified: Utc::now(),
-            name: "Device Preset".to_owned(),
-            tempo_ms: 500,
-            parallel: 0,
-            active_scene: 0,
-            effect_order: vec![
-                "Wah".to_owned(),
-                "Amp".to_owned(),
-                "Delay".to_owned(),
-                "Reverb".to_owned(),
-            ],
-            scenes: vec![],
-            effects: vec![],
-        };
-
-        // Check for a slot collision.
-        if let Some(idx) = self
-            .library
-            .presets
-            .iter()
-            .position(|p| p.slot == incoming.slot)
-        {
-            let existing = self.library.presets[idx].clone();
-            self.conflict = Some(ConflictState {
-                incoming,
-                existing,
-                existing_idx: idx,
-            });
-            self.active_overlay = Some(Overlay::Conflict);
-        } else {
-            self.library.presets.push(incoming);
-            let _ = self.storage.save_library(&self.library);
-            self.set_status("Preset pulled from device");
-        }
-    }
-
-    /// Push the currently selected local preset to the connected device.
-    fn action_send_to_device(&mut self) {
-        if self.operation_status != OperationStatus::Online {
-            self.set_status("Not connected — press d to select a device");
-            return;
-        }
-        if self.library.presets.is_empty() {
-            self.set_status("No preset selected");
-            return;
-        }
-
-        let entry = &mut self.library.presets[self.preset_selected];
-        // If local-only, assign it to slot 0 (first available); real
-        // implementation would send CC/SysEx and read the assigned slot back.
-        if entry.slot.is_none() {
-            entry.slot = Some(0);
-        }
-        entry.modified = Utc::now();
-        let _ = self.storage.save_library(&self.library);
-        self.set_status("Preset sent to device");
-    }
-
     /// Set a transient status message that disappears after [`STATUS_MESSAGE_LIFETIME`].
     pub(super) fn set_status(&mut self, msg: &str) {
         self.status_message = Some((msg.to_owned(), Instant::now() + STATUS_MESSAGE_LIFETIME));
@@ -484,14 +403,20 @@ impl App {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 /// Set up the terminal, run the event loop, and restore the terminal on exit.
+///
+/// Must be called from inside a tokio runtime (e.g. via `block_in_place`): the
+/// session worker is spawned on it. The worker stops when the TUI exits.
 pub fn run_tui() -> io::Result<()> {
+    let runtime = tokio::runtime::Handle::try_current().map_err(io::Error::other)?;
+    let (commands, events) = spawn_worker(&runtime);
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_event_loop(&mut terminal);
+    let result = run_event_loop(&mut terminal, commands, events);
 
     // Always restore terminal, even on error.
     disable_raw_mode()?;
@@ -505,10 +430,19 @@ pub fn run_tui() -> io::Result<()> {
     result
 }
 
-fn run_event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
+fn run_event_loop(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    commands: UnboundedSender<SessionCommand>,
+    mut events: UnboundedReceiver<SessionEvent>,
+) -> io::Result<()> {
     let mut app = App::new();
+    app.session_tx = Some(commands);
     let mut last_area = Rect::default();
     loop {
+        // Apply worker results first so this frame shows them.
+        while let Ok(event) = events.try_recv() {
+            app.handle_session_event(event);
+        }
         terminal.draw(|f| {
             last_area = f.area();
             render(f, &app);
