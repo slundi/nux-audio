@@ -41,6 +41,15 @@ pub enum FirmwareGen {
     Gen2,
 }
 
+impl std::fmt::Display for FirmwareGen {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Gen1 => "Gen1",
+            Self::Gen2 => "Gen2",
+        })
+    }
+}
+
 impl FirmwareGen {
     /// Derive generation from the version string returned by the device (e.g. `"v602"`).
     ///
@@ -304,7 +313,8 @@ pub fn extract_effects(response: &[u8], fw_gen: FirmwareGen) -> Result<Effect, N
     })
 }
 
-/// Parse the MG-30 signal-chain order from a full detail SysEx response.
+/// Parse the MG-30 signal-chain order from a full detail SysEx response
+/// (**fw 4.0.3 / GEN1 layout** — the GEN2 encoding is not yet known).
 ///
 /// The device encodes 11 effect slot IDs into bytes 147–164 of the response
 /// using a 3-byte group format:

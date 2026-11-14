@@ -1,4 +1,8 @@
-//! The [`Preset`] model and its decoders for MG-30 preset SysEx responses.
+//! The [`Preset`] model and the layout-independent decoders (slot code, basic
+//! response, name encoding).
+//!
+//! The full detail response layout differs per device and firmware generation, so
+//! it is decoded by the [`driver`](crate::driver) for that device.
 
 use std::collections::HashMap;
 
@@ -17,14 +21,17 @@ pub struct SceneSnapshot(pub [u8; 3]);
 /// A device preset, as decoded from SysEx responses.
 ///
 /// Which fields are filled depends on the decoder: the basic response only gives
-/// `number` and `active_scene_number`; the detail response gives the rest.
+/// `number` and `active_scene_number`; the detail response gives the rest, as far
+/// as the device's layout is known (see
+/// [`DeviceDriver::decode_preset_detail`](crate::driver::DeviceDriver::decode_preset_detail)).
 #[derive(Default, Clone, Debug)]
 pub struct Preset {
     /// Slot index (0x00–0x7F); see [`Preset::format_code`] for the display form.
     pub number: u8,
-    /// Raw tempo value encoded as `response[143] * 64 + response[144]`.
-    /// This is milliseconds-per-beat; convert to BPM with `60_000 / tempo`.
+    /// Tempo in milliseconds per beat; convert to BPM with `60_000 / tempo`.
     pub tempo: u16,
+    /// Whether tempo sync is enabled, when the response layout exposes it.
+    pub tempo_sync: Option<bool>,
     /// Parallel blend level (0–127).
     pub parallel: u8,
     /// Effect slots in signal-chain order.
@@ -79,52 +86,6 @@ impl Preset {
         Ok(Self {
             number: response[6],
             active_scene_number: Some(response[9]),
-            ..Default::default()
-        })
-    }
-
-    /// Parse all preset fields from a `CURRENT_PRESET_DETAIL` SysEx response.
-    ///
-    /// Response header: `[0xF0, 0x43, 0x58, 0x70, 0x0B, 0x02, ...]`
-    ///
-    /// Confirmed byte offsets (reverse-engineered from hardware captures):
-    /// | Bytes     | Field                                   |
-    /// |-----------|----------------------------------------|
-    /// | 6         | Preset number                           |
-    /// | 143–144   | Tempo (ms/beat = `[143]*64 + [144]`)   |
-    /// | 146       | Parallel blend (0–127)                 |
-    /// | 147–164   | Effect signal-chain order (18 bytes)   |
-    /// | 165–188   | Preset name (24 bytes, 3-byte pairs)   |
-    /// | 208–210   | Scene 1 on/off bytes                   |
-    /// | 211–213   | Scene 2 on/off bytes                   |
-    /// | 214–216   | Scene 3 on/off bytes                   |
-    pub fn extract_current_preset_detail_data(response: &[u8]) -> Result<Self, NuxAudioError> {
-        const MIN_LEN: usize = 217;
-        if response.len() < MIN_LEN {
-            return Err(NuxAudioError::ResponseTooShort {
-                expected: MIN_LEN,
-                actual: response.len(),
-            });
-        }
-
-        let number = response[6];
-        let tempo = (response[143] as u16) * 64 + response[144] as u16;
-        let parallel = response[146];
-        let effect_order = crate::effects::extract_effects_order(response)?;
-        let name = Self::extract_name(&response[165..189])?;
-        let scenes = vec![
-            SceneSnapshot([response[208], response[209], response[210]]),
-            SceneSnapshot([response[211], response[212], response[213]]),
-            SceneSnapshot([response[214], response[215], response[216]]),
-        ];
-
-        Ok(Self {
-            number,
-            name,
-            tempo,
-            parallel,
-            effect_order,
-            scenes,
             ..Default::default()
         })
     }
@@ -246,41 +207,5 @@ mod tests {
         let bytes = [b'A', 0x01, 0x00]; // 'A', then control char
         let name = Preset::extract_name(&bytes).unwrap();
         assert_eq!(name, "A");
-    }
-
-    #[test]
-    fn test_extract_current_preset_detail_data_too_short() {
-        let short = vec![0u8; 100];
-        assert!(matches!(
-            Preset::extract_current_preset_detail_data(&short),
-            Err(NuxAudioError::ResponseTooShort { .. })
-        ));
-    }
-
-    #[test]
-    fn test_extract_current_preset_detail_data_fields() {
-        let mut resp = vec![0u8; 217];
-        // Preset number
-        resp[6] = 0x0A;
-        // Tempo: 120 BPM → ms/beat = 500 → 500 = 7*64 + 52
-        resp[143] = 7;
-        resp[144] = 52;
-        // Parallel
-        resp[146] = 64;
-        // Scenes
-        resp[208] = 0x01;
-        resp[211] = 0x02;
-        resp[214] = 0x03;
-        // effect_order bytes 147..165 all zero → all Wah(0) — just check no panic
-        // name bytes 165..189 all zero → empty name
-
-        let preset = Preset::extract_current_preset_detail_data(&resp).unwrap();
-        assert_eq!(preset.number, 0x0A);
-        assert_eq!(preset.tempo, 500); // 7*64 + 52
-        assert_eq!(preset.parallel, 64);
-        assert_eq!(preset.scenes.len(), 3);
-        assert_eq!(preset.scenes[0].0[0], 0x01);
-        assert_eq!(preset.scenes[1].0[0], 0x02);
-        assert_eq!(preset.scenes[2].0[0], 0x03);
     }
 }

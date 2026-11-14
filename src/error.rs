@@ -80,6 +80,10 @@ pub enum SessionError {
         model: String,
     },
 
+    /// The device was detected but no protocol driver exists for its model yet.
+    #[error("{0} is detected but not supported yet (no driver; supported: MG-30)")]
+    UnsupportedDevice(String),
+
     // ── Transport ─────────────────────────────────────────────────────────────
     #[error("cannot connect to {model}: {source}")]
     Connect {
@@ -130,8 +134,13 @@ pub enum SessionError {
         model: String,
     },
 
-    #[error("preset slot {0} out of range (0–127)")]
-    SlotOutOfRange(u8),
+    /// The driver refused to build a request (e.g. a slot the device does not have).
+    #[error("{operation} rejected: {source}")]
+    Rejected {
+        operation: &'static str,
+        #[source]
+        source: NuxAudioError,
+    },
 }
 
 /// Errors raised while exporting or importing preset files (`crate::export`).

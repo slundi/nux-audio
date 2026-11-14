@@ -163,7 +163,7 @@ pub struct ControllerState {
     pub device: Device,
     pub device_connected: bool,
     /// Firmware version as a semver tuple — parse from
-    /// [`extract_version`](nux_audio::protocol::extract_version) with `semver_to_tuple`.
+    /// [`extract_version`](nux_audio::driver::mg30::extract_version) with `semver_to_tuple`.
     pub device_version: (u8, u8, u8),
     pub active: bool,
     pub presets: Vec<Preset>,

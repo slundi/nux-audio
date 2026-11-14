@@ -1,9 +1,10 @@
 //! Device-independent core of the NUX tooling: everything that is pure data or pure
 //! decoding, with no MIDI I/O.
 //!
+//! - [`driver`]: the [`DeviceDriver`](driver::DeviceDriver) trait and per-device drivers —
+//!   everything that varies by device family or firmware generation.
 //! - [`nux_sys_ex_commands`]: SysEx request builders and response header patterns.
-//! - [`protocol`]: decoding of device responses not tied to a preset (firmware version).
-//! - [`preset`]: the [`Preset`](preset::Preset) model and its SysEx decoders.
+//! - [`preset`]: the [`Preset`](preset::Preset) model and its layout-independent decoders.
 //! - [`effects`]: effect categories, model/knob catalogs, and catalog lookups.
 //! - [`registry`]: supported-device specifications embedded from `devices_registry.yaml`.
 //! - [`midi`], [`string`], [`error`]: shared helpers and the [`NuxAudioError`](error::NuxAudioError) type.
@@ -12,12 +13,12 @@
 
 #![deny(missing_docs)]
 
+pub mod driver;
 pub mod effects;
 pub mod error;
 pub mod midi;
 pub mod nux_sys_ex_commands;
 pub mod preset;
-pub mod protocol;
 pub mod registry;
 pub mod string;
 

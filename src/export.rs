@@ -272,6 +272,7 @@ mod tests {
             number: 5,
             name: "My Tone".to_owned(),
             tempo: 500,
+            tempo_sync: None,
             parallel: 64,
             active_scene_number: Some(1),
             scene: 1,

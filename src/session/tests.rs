@@ -4,6 +4,13 @@ use super::*;
 use crate::device::Manufacturer;
 use crate::error::MidiError;
 use crate::midi::MockMidi;
+use nux_audio::effects::FirmwareGen;
+use nux_audio::error::NuxAudioError;
+use nux_audio::nux_sys_ex_commands::{
+    CURRENT_PRESET_BASIC_RESPONSE_PATTERN as BASIC_HEADER,
+    CURRENT_PRESET_DETAIL_RESPONSE_PATTERN as DETAIL_HEADER,
+    DEVICE_VERSION_RESPONSE_PATTERN as VERSION_HEADER,
+};
 use std::collections::HashMap;
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -35,11 +42,21 @@ fn basic_response(number: u8, scene: u8) -> Vec<u8> {
     response
 }
 
+/// GEN2 (fw ≥ 5) detail response: 222 bytes, BPM 120 (byte 147 = 0x70), sync on.
 fn detail_response(number: u8) -> Vec<u8> {
-    let mut response = vec![0u8; 217];
+    let mut response = vec![0u8; 222];
     response[..6].copy_from_slice(&DETAIL_HEADER);
     response[6] = number;
-    // Tempo 500 ms/beat = 7*64 + 52
+    response[144] = 0x06;
+    response[147] = 0x70;
+    response
+}
+
+/// GEN1 (fw 4.0.3) detail response: tempo 500 ms/beat = 7*64 + 52 at bytes 143–144.
+fn detail_response_gen1(number: u8) -> Vec<u8> {
+    let mut response = vec![0u8; 218];
+    response[..6].copy_from_slice(&DETAIL_HEADER);
+    response[6] = number;
     response[143] = 7;
     response[144] = 52;
     response
@@ -48,7 +65,12 @@ fn detail_response(number: u8) -> Vec<u8> {
 /// Handshaken Gen2 session whose transport will answer with `responses`
 /// after the version reply. `sent` is cleared so tests only see their own traffic.
 async fn session_with(responses: Vec<Vec<u8>>) -> NuxSession<MockMidi> {
-    let mut queue = vec![version_response("v602")];
+    session_on_firmware("v602", responses).await
+}
+
+/// Like [`session_with`], for an arbitrary firmware version (e.g. `"v402"` = GEN1).
+async fn session_on_firmware(firmware: &str, responses: Vec<Vec<u8>>) -> NuxSession<MockMidi> {
+    let mut queue = vec![version_response(firmware)];
     queue.extend(responses);
     let mut session = NuxSession::handshake(
         MockMidi::with_responses(queue),
@@ -145,8 +167,9 @@ async fn handshake_detects_firmware_generation() {
     let session = NuxSession::handshake(mock, device("MG-30", "NUX MG-30"))
         .await
         .unwrap();
-    assert_eq!(session.firmware(), "v602");
-    assert_eq!(session.fw_gen(), FirmwareGen::Gen2);
+    assert_eq!(session.driver().firmware(), "v602");
+    assert_eq!(session.driver().firmware_gen(), Some(FirmwareGen::Gen2));
+    assert_eq!(session.driver().model_code(), "MG-30");
     assert_eq!(session.device().model, "MG-30");
     // The version request was sent with the standard F0 43 framing.
     assert_eq!(
@@ -160,7 +183,19 @@ async fn handshake_detects_firmware_generation() {
     )
     .await
     .unwrap();
-    assert_eq!(gen1.fw_gen(), FirmwareGen::Gen1);
+    assert_eq!(gen1.driver().firmware_gen(), Some(FirmwareGen::Gen1));
+}
+
+#[tokio::test]
+async fn handshake_refuses_device_without_driver() {
+    // A Mighty Plug Pro is detected by the registry but has no driver yet: fail
+    // before sending anything rather than speak MG-30 SysEx to it.
+    let mock = MockMidi::with_responses([version_response("v602")]);
+    match NuxSession::handshake(mock, device("MP-3", "NUX Mighty Plug Pro")).await {
+        Err(SessionError::UnsupportedDevice(model)) => assert_eq!(model, "MP-3"),
+        Err(other) => panic!("unexpected error: {other}"),
+        Ok(_) => panic!("handshake should refuse an unsupported device"),
+    }
 }
 
 #[tokio::test]
@@ -396,6 +431,33 @@ async fn set_model_by_id_sends_sysex() {
 }
 
 #[tokio::test]
+async fn set_model_by_known_id_reports_title() {
+    // Damp reverb (0x0C) exists on GEN2 only: titled there, raw-but-allowed on GEN1.
+    let mut gen2 = session_with(vec![]).await;
+    let change = gen2
+        .set_model(EffectCategory::Reverb, &ModelRef::Id(0x0C))
+        .unwrap();
+    assert!(change.title.is_some());
+
+    let mut gen1 = session_on_firmware("v402", vec![]).await;
+    let change = gen1
+        .set_model(EffectCategory::Reverb, &ModelRef::Id(0x0C))
+        .unwrap();
+    assert_eq!(change.title, None);
+    assert_eq!(gen1.transport.sent.len(), 1);
+}
+
+#[tokio::test]
+async fn set_model_by_name_follows_generation() {
+    let mut gen1 = session_on_firmware("v402", vec![]).await;
+    assert!(matches!(
+        gen1.set_model(EffectCategory::Reverb, &ModelRef::Name("damp".to_owned())),
+        Err(SessionError::UnknownModel { .. })
+    ));
+    assert!(gen1.transport.sent.is_empty());
+}
+
+#[tokio::test]
 async fn set_model_by_name_resolves_title() {
     let mut session = session_with(vec![]).await;
     let change = session
@@ -443,6 +505,7 @@ async fn fetch_current_preset_reads_basic_then_detail() {
     let preset = session.fetch_preset(None).await.unwrap();
     assert_eq!(preset.number, 10);
     assert_eq!(preset.tempo, 500);
+    assert_eq!(preset.tempo_sync, Some(true));
     assert_eq!(preset.active_scene_number, Some(2));
 
     let sent = &session.transport.sent;
@@ -463,11 +526,28 @@ async fn fetch_explicit_slot_skips_basic_query() {
 }
 
 #[tokio::test]
+async fn fetch_decodes_with_the_firmware_layout() {
+    // GEN1 firmware: tempo at bytes 143–144, no sync flag.
+    let mut gen1 = session_on_firmware("v402", vec![detail_response_gen1(3)]).await;
+    let preset = gen1.fetch_preset(Some(3)).await.unwrap();
+    assert_eq!(preset.tempo, 500);
+    assert_eq!(preset.tempo_sync, None);
+
+    // The same GEN1 bytes on a GEN2 session are read with the GEN2 layout.
+    let mut gen2 = session_with(vec![detail_response_gen1(3)]).await;
+    let preset = gen2.fetch_preset(Some(3)).await.unwrap();
+    assert_eq!(preset.tempo_sync, Some(true)); // byte 144 = 52 ≠ 0
+}
+
+#[tokio::test]
 async fn fetch_rejects_slot_out_of_range_without_sending() {
     let mut session = session_with(vec![]).await;
     assert!(matches!(
         session.fetch_preset(Some(0x80)).await,
-        Err(SessionError::SlotOutOfRange(0x80))
+        Err(SessionError::Rejected {
+            operation: "preset detail query",
+            source: NuxAudioError::InvalidPresetIndex(0x80)
+        })
     ));
     assert!(session.transport.sent.is_empty());
 }

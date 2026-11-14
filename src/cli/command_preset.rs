@@ -139,12 +139,16 @@ fn print_hex_dump(label: &str, bytes: &[u8]) {
 async fn show(device_name: Option<&str>, format: OutputFormat) -> Result<(), CliError> {
     let mut session = NuxSession::connect(device_name).await?;
 
-    println!("Firmware:  {} ({:?})", session.firmware(), session.fw_gen());
+    let driver = session.driver();
+    match driver.firmware_gen() {
+        Some(fw_gen) => println!("Firmware:  {} ({fw_gen})", driver.firmware()),
+        None => println!("Firmware:  {}", driver.firmware()),
+    }
 
     // Step 1: basic response → preset number + active scene
     let basic_resp = session.current_preset_raw().await?;
     print_hex_dump("basic", &basic_resp);
-    let basic = Preset::extract_current_preset_basic_data(&basic_resp)?;
+    let basic = session.driver().decode_current_preset(&basic_resp)?;
 
     let scene_letter = match basic.active_scene_number {
         Some(0) => 'A',
@@ -160,29 +164,20 @@ async fn show(device_name: Option<&str>, format: OutputFormat) -> Result<(), Cli
     );
     println!("Scene:   S{scene_letter}");
 
-    // Step 2: detail response → name, tempo, effect order, scenes
+    // Step 2: detail response → name, tempo, effect order, scenes (layout per firmware)
     let detail_resp = session.preset_detail_raw(basic.number).await?;
-
-    // GEN2: BPM at bytes 144 (sync state) and 147 (value)
-    // Formula: BPM = (byte_147 + 128) / 2
-    // Confirmed at BPM 98 (0x44) and BPM 120 (0x70)
-    if detail_resp.len() > 147 {
-        let sync_on = detail_resp[144] != 0x00;
-        let bpm = (detail_resp[147] as u16 + 128) / 2;
-        if sync_on {
-            println!("BPM:     {bpm} (sync on)");
-        } else {
-            println!("BPM:     {bpm} (sync off)");
-        }
-    }
-
     print_hex_dump("detail", &detail_resp);
 
-    let mut preset = Preset::extract_current_preset_detail_data(&detail_resp)?;
+    let mut preset = session.driver().decode_preset_detail(&detail_resp)?;
     preset.active_scene_number = basic.active_scene_number;
     println!("Name:    {}", preset.name);
     let bpm = 60_000u32.checked_div(preset.tempo as u32).unwrap_or(0);
-    println!("Tempo:   {bpm} BPM (raw: {})", preset.tempo);
+    let sync = match preset.tempo_sync {
+        Some(true) => ", sync on",
+        Some(false) => ", sync off",
+        None => "",
+    };
+    println!("Tempo:   {bpm} BPM (raw: {} ms/beat{sync})", preset.tempo);
     println!("Parallel:{}", preset.parallel);
     let order: Vec<&str> = preset.effect_order.iter().map(|e| e.as_str()).collect();
     println!("Chain:   {}", order.join(" → "));

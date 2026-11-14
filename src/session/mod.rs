@@ -1,26 +1,20 @@
 //! Device session service.
 //!
-//! [`NuxSession`] owns a connected [`MidiTransport`], the detected [`Device`] and its
-//! firmware generation, and exposes every device operation (bypass, knob, model,
-//! preset fetch) as a typed async method. The CLI (and later the TUI) are thin
+//! [`NuxSession`] owns a connected [`MidiTransport`], the detected [`Device`] and the
+//! [`DeviceDriver`] chosen for it, and exposes every device operation (bypass, knob,
+//! model, preset fetch) as a typed async method. The CLI (and later the TUI) are thin
 //! front-ends over it: they parse input, call the session, and render results.
 //!
+//! The session does the I/O and error mapping; everything device- or
+//! firmware-specific (payloads, layouts, catalogs) is delegated to the driver.
 //! Generic over the transport so all logic is unit-tested with `MockMidi`.
 
 use crate::device::Device;
 use crate::error::SessionError;
 use crate::midi::{MidiConnection, MidiTransport};
-use nux_audio::effects::{
-    CC_BYPASS_OFF, CC_BYPASS_ON, EffectCategory, FirmwareGen, find_knob_def, find_model_by_name,
-};
-use nux_audio::nux_sys_ex_commands::{
-    CURRENT_PRESET_BASIC, CURRENT_PRESET_BASIC_RESPONSE_PATTERN as BASIC_HEADER,
-    CURRENT_PRESET_DETAIL_RESPONSE_PATTERN as DETAIL_HEADER, DEVICE_VERSION_REQUEST,
-    DEVICE_VERSION_RESPONSE_PATTERN as VERSION_HEADER, mg30_change_effect_model,
-    mg30_request_preset,
-};
+use nux_audio::driver::{DeviceDriver, DriverKind, Request};
+use nux_audio::effects::{CC_BYPASS_OFF, CC_BYPASS_ON, EffectCategory};
 use nux_audio::preset::Preset;
-use nux_audio::protocol::extract_version;
 use std::time::Duration;
 
 #[cfg(test)]
@@ -28,8 +22,6 @@ mod tests;
 
 /// How long to wait for any device response.
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(3);
-/// Highest addressable preset slot (7-bit SysEx data byte).
-const MAX_PRESET_SLOT: u8 = 0x7F;
 
 // ── Operation inputs / outputs ────────────────────────────────────────────────
 
@@ -141,8 +133,7 @@ pub fn resolve_device(name: Option<&str>) -> Result<(Device, usize, usize), Sess
 pub struct NuxSession<T> {
     transport: T,
     device: Device,
-    firmware: String,
-    fw_gen: FirmwareGen,
+    driver: Box<dyn DeviceDriver>,
 }
 
 impl NuxSession<MidiConnection> {
@@ -159,28 +150,25 @@ impl NuxSession<MidiConnection> {
 }
 
 impl<T: MidiTransport> NuxSession<T> {
-    /// Query the firmware version over `transport` and detect the hardware generation.
+    /// Pick the driver for `device`, query its firmware version over `transport`, and
+    /// build the generation-aware driver from the reply.
     ///
     /// Must complete before any other operation so that version-dependent catalog
-    /// lookups (e.g. Gen2-only effect models) use the right table.
+    /// lookups and response layouts (e.g. GEN2 detail offsets) are the right ones.
     pub async fn handshake(mut transport: T, device: Device) -> Result<Self, SessionError> {
-        let response = transport
-            .request_sysex(&DEVICE_VERSION_REQUEST, &VERSION_HEADER, RESPONSE_TIMEOUT)
-            .await
-            .map_err(|source| SessionError::Midi {
-                operation: "version query",
-                source,
-            })?;
-        let firmware = extract_version(&response).map_err(|source| SessionError::Parse {
-            response: "firmware version",
-            source,
-        })?;
-        let fw_gen = FirmwareGen::from_version_str(&firmware);
+        let kind = DriverKind::for_model(&device.model)
+            .ok_or_else(|| SessionError::UnsupportedDevice(device.model.clone()))?;
+        let response = request(&mut transport, "version query", &kind.version_request()).await?;
+        let driver =
+            kind.from_version_response(&response)
+                .map_err(|source| SessionError::Parse {
+                    response: "firmware version",
+                    source,
+                })?;
         Ok(Self {
             transport,
             device,
-            firmware,
-            fw_gen,
+            driver,
         })
     }
 
@@ -189,14 +177,9 @@ impl<T: MidiTransport> NuxSession<T> {
         &self.device
     }
 
-    /// Firmware version string reported by the device (e.g. `"v602"`).
-    pub fn firmware(&self) -> &str {
-        &self.firmware
-    }
-
-    /// Hardware generation derived from [`firmware`](Self::firmware).
-    pub fn fw_gen(&self) -> FirmwareGen {
-        self.fw_gen
+    /// The protocol driver for the connected device (firmware, generation, decoders).
+    pub fn driver(&self) -> &dyn DeviceDriver {
+        self.driver.as_ref()
     }
 
     /// Activate or bypass an effect slot. Returns the `(cc, value)` sent.
@@ -205,8 +188,9 @@ impl<T: MidiTransport> NuxSession<T> {
         category: EffectCategory,
         state: BypassState,
     ) -> Result<(u8, u8), SessionError> {
-        let cc = category
-            .bypass_cc()
+        let cc = self
+            .driver
+            .bypass_cc(category)
             .ok_or(SessionError::NoBypassCc(category.as_str()))?;
         let value = match state {
             BypassState::On => CC_BYPASS_ON,
@@ -229,10 +213,12 @@ impl<T: MidiTransport> NuxSession<T> {
             KnobIdentifier::Id(id) => *id,
             KnobIdentifier::Name(name) => {
                 let knob =
-                    find_knob_def(category, name).ok_or_else(|| SessionError::UnknownKnob {
-                        category: category.as_str(),
-                        knob: name.clone(),
-                    })?;
+                    self.driver
+                        .knob(category, name)
+                        .ok_or_else(|| SessionError::UnknownKnob {
+                            category: category.as_str(),
+                            knob: name.clone(),
+                        })?;
                 if let Some(max) = knob.range_end
                     && param.value > max
                 {
@@ -251,6 +237,9 @@ impl<T: MidiTransport> NuxSession<T> {
     }
 
     /// Resolve `model` against this device's catalog (honouring the firmware generation).
+    ///
+    /// Raw IDs are accepted even when absent from the catalog (escape hatch); their
+    /// title is filled in when the catalog knows them.
     pub fn resolve_model(
         &self,
         category: EffectCategory,
@@ -259,9 +248,14 @@ impl<T: MidiTransport> NuxSession<T> {
         match model {
             ModelRef::Id(id) => Ok(ModelChange {
                 id: *id,
-                title: None,
+                title: self
+                    .driver
+                    .model_by_id(category, *id)
+                    .map(|option| option.title.clone()),
             }),
-            ModelRef::Name(name) => find_model_by_name(category, name, self.fw_gen)
+            ModelRef::Name(name) => self
+                .driver
+                .model_by_name(category, name)
                 .map(|(id, option)| ModelChange {
                     id,
                     title: Some(option.title.clone()),
@@ -281,7 +275,7 @@ impl<T: MidiTransport> NuxSession<T> {
     ) -> Result<ModelChange, SessionError> {
         let change = self.resolve_model(category, model)?;
         self.transport
-            .send_sysex(&mg30_change_effect_model(category as u8, change.id))
+            .send_sysex(&self.driver.change_model(category, change.id))
             .map_err(|source| SessionError::Midi {
                 operation: "model change",
                 source,
@@ -291,30 +285,31 @@ impl<T: MidiTransport> NuxSession<T> {
 
     /// Raw current-preset basic response (preset number + active scene).
     pub async fn current_preset_raw(&mut self) -> Result<Vec<u8>, SessionError> {
-        self.request("current preset query", &CURRENT_PRESET_BASIC, &BASIC_HEADER)
-            .await
+        let current = self.driver.current_preset_request();
+        request(&mut self.transport, "current preset query", &current).await
     }
 
-    /// Raw preset detail response for `slot` (0–127).
+    /// Raw preset detail response for `slot`.
     pub async fn preset_detail_raw(&mut self, slot: u8) -> Result<Vec<u8>, SessionError> {
-        if slot > MAX_PRESET_SLOT {
-            return Err(SessionError::SlotOutOfRange(slot));
-        }
-        self.request(
-            "preset detail query",
-            &mg30_request_preset(slot),
-            &DETAIL_HEADER,
-        )
-        .await
+        let detail =
+            self.driver
+                .preset_detail_request(slot)
+                .map_err(|source| SessionError::Rejected {
+                    operation: "preset detail query",
+                    source,
+                })?;
+        request(&mut self.transport, "preset detail query", &detail).await
     }
 
     /// Currently loaded preset: only `number` and `active_scene_number` are filled.
     pub async fn current_preset(&mut self) -> Result<Preset, SessionError> {
         let response = self.current_preset_raw().await?;
-        Preset::extract_current_preset_basic_data(&response).map_err(|source| SessionError::Parse {
-            response: "current preset",
-            source,
-        })
+        self.driver
+            .decode_current_preset(&response)
+            .map_err(|source| SessionError::Parse {
+                response: "current preset",
+                source,
+            })
     }
 
     /// Fetch and parse a full preset.
@@ -333,12 +328,12 @@ impl<T: MidiTransport> NuxSession<T> {
             }
         };
         let response = self.preset_detail_raw(slot).await?;
-        let mut preset =
-            Preset::extract_current_preset_detail_data(&response).map_err(|source| {
-                SessionError::Parse {
-                    response: "preset detail",
-                    source,
-                }
+        let mut preset = self
+            .driver
+            .decode_preset_detail(&response)
+            .map_err(|source| SessionError::Parse {
+                response: "preset detail",
+                source,
             })?;
         preset.active_scene_number = active_scene;
         Ok(preset)
@@ -355,16 +350,17 @@ impl<T: MidiTransport> NuxSession<T> {
             .await
             .map_err(|source| SessionError::Midi { operation, source })
     }
+}
 
-    async fn request(
-        &mut self,
-        operation: &'static str,
-        request: &[u8],
-        response_header: &[u8],
-    ) -> Result<Vec<u8>, SessionError> {
-        self.transport
-            .request_sysex(request, response_header, RESPONSE_TIMEOUT)
-            .await
-            .map_err(|source| SessionError::Midi { operation, source })
-    }
+/// Send a driver [`Request`] and wait for its response. A free function (not a
+/// method) so the handshake can use it before the session exists.
+async fn request<T: MidiTransport>(
+    transport: &mut T,
+    operation: &'static str,
+    request: &Request,
+) -> Result<Vec<u8>, SessionError> {
+    transport
+        .request_sysex(&request.payload, request.response_header, RESPONSE_TIMEOUT)
+        .await
+        .map_err(|source| SessionError::Midi { operation, source })
 }
