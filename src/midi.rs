@@ -1,6 +1,9 @@
-use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
+//! MIDI transport: the [`MidiSend`] abstraction, the midir-backed [`MidiManager`],
+//! and the async [`MidiDispatcher`] that routes device responses to tokio tasks.
+
+use crate::error::MidiError;
+use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection, MidiOutputPort};
 use nux_audio::{SYSEX_END, SYSEX_START};
-use std::error::Error;
 use std::time::Duration;
 use tokio::sync::broadcast;
 
@@ -15,13 +18,52 @@ use tokio::sync::broadcast;
 /// (see [`MIN_CC_INTERVAL`]) via [`tokio::time::sleep`], which must not block
 /// the runtime worker.
 pub trait MidiSend {
-    fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>>;
+    fn send_sysex(&mut self, data: &[u8]) -> Result<(), MidiError>;
     fn send_cc(
         &mut self,
         control: u8,
         value: u8,
-    ) -> impl std::future::Future<Output = Result<(), Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<(), MidiError>> + Send;
 }
+
+/// Reject a port `index` that is not below `available`.
+fn check_port_index(
+    direction: &'static str,
+    index: usize,
+    available: usize,
+) -> Result<(), MidiError> {
+    if index < available {
+        Ok(())
+    } else {
+        Err(MidiError::PortOutOfRange {
+            direction,
+            index,
+            available,
+        })
+    }
+}
+
+/// Map a midir connection failure to [`MidiError::Connect`], dropping the
+/// consumed `MidiInput`/`MidiOutput` that midir hands back.
+fn connect_error<T>(port: &str) -> impl FnOnce(midir::ConnectError<T>) -> MidiError + '_ {
+    move |err| MidiError::Connect {
+        port: port.to_owned(),
+        kind: err.kind(),
+    }
+}
+
+/// Frame `data` as a SysEx message: `F0 <prefix…> <data…> F7`.
+fn frame_sysex(prefix: &[u8], data: &[u8]) -> Vec<u8> {
+    let mut buffer = Vec::with_capacity(prefix.len() + data.len() + 2);
+    buffer.push(SYSEX_START);
+    buffer.extend_from_slice(prefix);
+    buffer.extend_from_slice(data);
+    buffer.push(SYSEX_END);
+    buffer
+}
+
+/// Manufacturer byte prepended by [`MidiManager::send_sysex`].
+const SYSEX_MANUFACTURER: u8 = 0x43;
 
 /// Buffer size for the broadcast channel that fans out incoming MIDI messages.
 ///
@@ -137,7 +179,7 @@ pub struct MidiManager {
 }
 
 impl MidiManager {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new() -> Result<Self, MidiError> {
         let output = MidiOutput::new("NUX Audio MIDI Output")?;
         let input = MidiInput::new("NUX Audio MIDI Input")?;
 
@@ -179,35 +221,11 @@ impl MidiManager {
         &mut self,
         port_in: usize,
         port_out: usize,
-    ) -> Result<std::sync::mpsc::Receiver<Vec<u8>>, Box<dyn Error>> {
-        let ports_out = self.output.ports();
-        if port_out >= ports_out.len() {
-            return Err("Output port index out of range".into());
-        }
-        let ports_in = self.input.ports();
-        if port_in >= ports_in.len() {
-            return Err("Input port index out of range".into());
-        }
-
-        let port = &ports_out[port_out];
-        let port_name = self.output.port_name(port)?;
-        let output = MidiOutput::new("NUX Audio MIDI Output")?;
-        self.connection_out = Some(output.connect(port, &format!("nux-audio-{}", port_name))?);
-
-        let port = &ports_in[port_in];
-        let port_name = self.input.port_name(port)?;
-        let input = MidiInput::new("NUX Audio MIDI Input")?;
+    ) -> Result<std::sync::mpsc::Receiver<Vec<u8>>, MidiError> {
         let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
-        let connection_in = input.connect(
-            port,
-            &format!("nux-audio-{}", port_name),
-            move |_stamp, message, _| {
-                let _ = tx.send(message.to_vec());
-            },
-            (),
-        )?;
-        self.connection_in = Some(connection_in);
-
+        self.connect_both(port_in, port_out, move |message| {
+            let _ = tx.send(message.to_vec());
+        })?;
         Ok(rx)
     }
 
@@ -220,80 +238,77 @@ impl MidiManager {
         &mut self,
         port_in: usize,
         port_out: usize,
-    ) -> Result<MidiDispatcher, Box<dyn Error>> {
-        let ports_out = self.output.ports();
-        if port_out >= ports_out.len() {
-            return Err("Output port index out of range".into());
-        }
-        let ports_in = self.input.ports();
-        if port_in >= ports_in.len() {
-            return Err("Input port index out of range".into());
-        }
-
-        let port = &ports_out[port_out];
-        let port_name = self.output.port_name(port)?;
-        let output = MidiOutput::new("NUX Audio MIDI Output")?;
-        self.connection_out = Some(output.connect(port, &format!("nux-audio-{port_name}"))?);
-
-        let port = &ports_in[port_in];
-        let port_name = self.input.port_name(port)?;
-        let input = MidiInput::new("NUX Audio MIDI Input")?;
+    ) -> Result<MidiDispatcher, MidiError> {
         let (tx, _) = broadcast::channel::<Vec<u8>>(DISPATCHER_CAPACITY);
         let tx_clone = tx.clone();
-        let connection_in = input.connect(
-            port,
-            &format!("nux-audio-{port_name}"),
-            move |_stamp, message, _| {
-                let _ = tx_clone.send(message.to_vec());
-            },
-            (),
-        )?;
-        self.connection_in = Some(connection_in);
-
+        self.connect_both(port_in, port_out, move |message| {
+            let _ = tx_clone.send(message.to_vec());
+        })?;
         Ok(MidiDispatcher::new(tx))
     }
 
     /// Connect to a MIDI output port only (for send-only operations like CC messages).
-    pub fn connect_output(&mut self, port_out: usize) -> Result<(), Box<dyn Error>> {
+    pub fn connect_output(&mut self, port_out: usize) -> Result<(), MidiError> {
         let ports_out = self.output.ports();
-        if port_out >= ports_out.len() {
-            return Err("Output port index out of range".into());
-        }
-        let port = &ports_out[port_out];
-        let port_name = self.output.port_name(port)?;
-        let output = MidiOutput::new("NUX Audio MIDI Output")?;
-        self.connection_out = Some(output.connect(port, &format!("nux-audio-{port_name}"))?);
+        check_port_index("output", port_out, ports_out.len())?;
+        self.connection_out = Some(self.open_output(&ports_out[port_out])?);
         Ok(())
     }
 
-    /// Send SysEx data to the connected device
-    pub fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
-        let mut buffer = Vec::with_capacity(data.len() + 3);
-        buffer.push(SYSEX_START);
-        buffer.push(0x43);
-        buffer.extend_from_slice(data);
-        buffer.push(SYSEX_END);
-        match &mut self.connection_out {
-            Some(conn) => {
-                conn.send(&buffer)?;
-                Ok(())
-            }
-            None => Err("No MIDI connection established".into()),
-        }
+    /// Validate both port indices, then open output and input connections.
+    ///
+    /// `on_message` is invoked from the midir callback thread for every incoming
+    /// message. Connections are only stored once both have opened successfully.
+    fn connect_both<F>(
+        &mut self,
+        port_in: usize,
+        port_out: usize,
+        mut on_message: F,
+    ) -> Result<(), MidiError>
+    where
+        F: FnMut(&[u8]) + Send + 'static,
+    {
+        let ports_out = self.output.ports();
+        check_port_index("output", port_out, ports_out.len())?;
+        let ports_in = self.input.ports();
+        check_port_index("input", port_in, ports_in.len())?;
+
+        let connection_out = self.open_output(&ports_out[port_out])?;
+
+        let port = &ports_in[port_in];
+        let port_name = self.input.port_name(port)?;
+        let input = MidiInput::new("NUX Audio MIDI Input")?;
+        let connection_in = input
+            .connect(
+                port,
+                &format!("nux-audio-{port_name}"),
+                move |_stamp, message, _| on_message(message),
+                (),
+            )
+            .map_err(connect_error(&port_name))?;
+
+        self.connection_out = Some(connection_out);
+        self.connection_in = Some(connection_in);
+        Ok(())
     }
 
-    pub fn send_sysex_raw(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
-        let mut buffer = Vec::with_capacity(data.len() + 2);
-        buffer.push(SYSEX_START);
-        buffer.extend_from_slice(data);
-        buffer.push(SYSEX_END);
-        match &mut self.connection_out {
-            Some(conn) => {
-                conn.send(&buffer)?;
-                Ok(())
-            }
-            None => Err("No MIDI connection established".into()),
-        }
+    /// Open a connection to `port` on a fresh `MidiOutput` (midir consumes it on connect).
+    fn open_output(&self, port: &MidiOutputPort) -> Result<MidiOutputConnection, MidiError> {
+        let port_name = self.output.port_name(port)?;
+        let output = MidiOutput::new("NUX Audio MIDI Output")?;
+        output
+            .connect(port, &format!("nux-audio-{port_name}"))
+            .map_err(connect_error(&port_name))
+    }
+
+    /// Send SysEx data to the connected device
+    pub fn send_sysex(&mut self, data: &[u8]) -> Result<(), MidiError> {
+        self.send_raw_midi(&frame_sysex(&[SYSEX_MANUFACTURER], data))
+    }
+
+    /// Send `data` wrapped only in `F0 … F7` (no manufacturer byte added).
+    pub fn send_sysex_raw(&mut self, data: &[u8]) -> Result<(), MidiError> {
+        self.send_raw_midi(&frame_sysex(&[], data))
     }
 
     /// Send a raw MIDI message directly to the connected output port.
@@ -301,17 +316,17 @@ impl MidiManager {
     /// The caller is responsible for providing a valid MIDI message.
     /// Use [`send_sysex`](MidiManager::send_sysex) for SysEx and
     /// [`send_cc`](MidiManager::send_cc) for Control Change messages.
-    pub fn send_raw_midi(&mut self, msg: &[u8]) -> Result<(), Box<dyn Error>> {
+    pub fn send_raw_midi(&mut self, msg: &[u8]) -> Result<(), MidiError> {
         match &mut self.connection_out {
             Some(conn) => conn.send(msg).map_err(Into::into),
-            None => Err("No MIDI connection established".into()),
+            None => Err(MidiError::NotConnected),
         }
     }
 
     /// Send a MIDI Control Change (CC) message on channel 1 (MIDI channel 0).
     ///
     /// Both `control` and `value` must be in the range 0–127 (MIDI 7-bit limit).
-    /// Returns [`crate::error::NuxError::CcValueOutOfRange`] if `value > 127`.
+    /// Returns [`MidiError::CcValueOutOfRange`] if `value > 127`.
     ///
     /// Enforces a minimum inter-command delay of [`MIN_CC_INTERVAL`] via
     /// `tokio::time::sleep` to protect the device from CC floods. Because the
@@ -330,9 +345,9 @@ impl MidiManager {
     /// manager.send_cc(0, 0x7F).await?;
     /// # Ok(()) }
     /// ```
-    pub async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+    pub async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), MidiError> {
         if value > 127 {
-            return Err(crate::error::NuxError::CcValueOutOfRange(value).into());
+            return Err(MidiError::CcValueOutOfRange(value));
         }
         wait_rate_limit(self.last_cc_sent, MIN_CC_INTERVAL).await;
         // 0xB0 = Control Change on MIDI channel 1 (0-indexed channel 0)
@@ -357,11 +372,11 @@ impl Drop for MidiManager {
 }
 
 impl MidiSend for MidiManager {
-    fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    fn send_sysex(&mut self, data: &[u8]) -> Result<(), MidiError> {
         self.send_sysex(data)
     }
 
-    async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+    async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), MidiError> {
         self.send_cc(control, value).await
     }
 }
@@ -373,6 +388,7 @@ impl MidiSend for MidiManager {
 /// Records every outgoing message so tests can assert which bytes were sent.
 /// Set `should_fail = true` to simulate a connection error.
 #[cfg(test)]
+#[derive(Default)]
 pub struct MockMidi {
     /// Raw bytes of every message sent (CC: `[0xB0, ctrl, val]`;
     /// SysEx: `[0xF0, 0x43, …data…, 0xF7]`).
@@ -383,33 +399,27 @@ pub struct MockMidi {
 #[cfg(test)]
 impl MockMidi {
     pub fn new() -> Self {
-        Self {
-            sent: Vec::new(),
-            should_fail: false,
-        }
+        Self::default()
     }
 }
 
 #[cfg(test)]
 impl MidiSend for MockMidi {
-    fn send_sysex(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    fn send_sysex(&mut self, data: &[u8]) -> Result<(), MidiError> {
         if self.should_fail {
-            return Err("mock send failure".into());
+            return Err(midir::SendError::Other("mock send failure").into());
         }
-        let mut msg = vec![SYSEX_START, 0x43];
-        msg.extend_from_slice(data);
-        msg.push(SYSEX_END);
-        self.sent.push(msg);
+        self.sent.push(frame_sysex(&[SYSEX_MANUFACTURER], data));
         Ok(())
     }
 
-    async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), Box<dyn Error>> {
+    async fn send_cc(&mut self, control: u8, value: u8) -> Result<(), MidiError> {
         if self.should_fail {
-            return Err("mock send failure".into());
+            return Err(midir::SendError::Other("mock send failure").into());
         }
-        // NuxError::CcValueOutOfRange mirrors MidiManager::send_cc validation
+        // Mirrors MidiManager::send_cc validation
         if value > 127 {
-            return Err(crate::error::NuxError::CcValueOutOfRange(value).into());
+            return Err(MidiError::CcValueOutOfRange(value));
         }
         self.sent.push(vec![0xB0, control, value]);
         Ok(())
@@ -498,5 +508,87 @@ mod tests {
             RecvStep::Return(Err(crate::error::NuxError::ChannelClosed)) => {}
             _ => panic!("expected Return(Err(ChannelClosed))"),
         }
+    }
+
+    #[test]
+    fn check_port_index_bounds() {
+        assert!(check_port_index("input", 0, 1).is_ok());
+        assert!(matches!(
+            check_port_index("output", 2, 2),
+            Err(MidiError::PortOutOfRange {
+                direction: "output",
+                index: 2,
+                available: 2
+            })
+        ));
+        assert!(check_port_index("input", 0, 0).is_err());
+    }
+
+    #[test]
+    fn frame_sysex_with_and_without_prefix() {
+        assert_eq!(
+            frame_sysex(&[SYSEX_MANUFACTURER], &[0x58, 0x01]),
+            vec![0xF0, 0x43, 0x58, 0x01, 0xF7]
+        );
+        assert_eq!(
+            frame_sysex(&[], &[0x43, 0x58]),
+            vec![0xF0, 0x43, 0x58, 0xF7]
+        );
+        assert_eq!(frame_sysex(&[], &[]), vec![0xF0, 0xF7]);
+    }
+
+    #[test]
+    fn connect_error_keeps_port_and_kind() {
+        let err = connect_error("NUX MG-30")(midir::ConnectError::new(
+            midir::ConnectErrorKind::InvalidPort,
+            (),
+        ));
+        assert!(matches!(
+            err,
+            MidiError::Connect { ref port, kind: midir::ConnectErrorKind::InvalidPort }
+                if port == "NUX MG-30"
+        ));
+    }
+
+    #[tokio::test]
+    async fn mock_midi_returns_typed_errors() {
+        let mut mock = MockMidi::new();
+        assert!(matches!(
+            mock.send_cc(1, 200).await,
+            Err(MidiError::CcValueOutOfRange(200))
+        ));
+
+        mock.should_fail = true;
+        assert!(matches!(mock.send_sysex(&[0x01]), Err(MidiError::Send(_))));
+        assert!(matches!(mock.send_cc(1, 1).await, Err(MidiError::Send(_))));
+        assert!(mock.sent.is_empty());
+    }
+
+    /// Hardware-free checks on a real backend; skipped when MIDI can't initialize
+    /// (e.g. CI containers without ALSA sequencer access).
+    #[tokio::test]
+    async fn manager_errors_without_connection() {
+        let Ok(mut manager) = MidiManager::new() else {
+            return;
+        };
+        assert!(matches!(
+            manager.send_sysex(&[0x01]),
+            Err(MidiError::NotConnected)
+        ));
+        assert!(matches!(
+            manager.send_cc(1, 200).await,
+            Err(MidiError::CcValueOutOfRange(200))
+        ));
+        assert!(matches!(
+            manager.connect_output(usize::MAX),
+            Err(MidiError::PortOutOfRange {
+                direction: "output",
+                ..
+            })
+        ));
+        assert!(matches!(
+            manager.connect_with_dispatcher(usize::MAX, usize::MAX),
+            Err(MidiError::PortOutOfRange { .. })
+        ));
     }
 }

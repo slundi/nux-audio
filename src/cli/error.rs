@@ -1,4 +1,6 @@
-use crate::error::NuxError;
+//! CLI-level error type for the `nux-cli` binary; wraps domain errors via `#[from]`.
+
+use crate::error::{ExportError, MidiError, NuxError};
 
 /// CLI-level errors for the `nux-cli` binary.
 #[derive(thiserror::Error, Debug)]
@@ -33,18 +35,28 @@ pub enum CliError {
     #[error(transparent)]
     Parse(#[from] NuxError),
 
+    #[error(transparent)]
+    Midi(#[from] MidiError),
+
+    #[error(transparent)]
+    Export(#[from] ExportError),
+
     #[error("internal task error: {0}")]
     TaskJoin(String),
+}
 
-    #[error("cannot serialize preset: {0}")]
-    Serialize(String),
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    #[error("cannot deserialize preset: {0}")]
-    Deserialize(String),
+    #[test]
+    fn test_domain_errors_convert_transparently() {
+        let midi: CliError = MidiError::NotConnected.into();
+        assert!(matches!(midi, CliError::Midi(_)));
+        assert_eq!(midi.to_string(), MidiError::NotConnected.to_string());
 
-    #[error("cannot write to '{path}': {detail}")]
-    WriteFile { path: String, detail: String },
-
-    #[error("cannot read from '{path}': {detail}")]
-    ReadFile { path: String, detail: String },
+        let export: CliError = ExportError::Serialize("bad".to_owned()).into();
+        assert!(matches!(export, CliError::Export(_)));
+        assert_eq!(export.to_string(), "cannot serialize preset: bad");
+    }
 }

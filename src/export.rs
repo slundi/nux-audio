@@ -1,6 +1,8 @@
+//! Versioned preset file format (YAML/JSON): export types, schema migration and file I/O.
+
 use serde::{Deserialize, Serialize};
 
-use crate::cli::error::CliError;
+use crate::error::ExportError;
 use crate::preset::Preset;
 
 // ── Schema migration ──────────────────────────────────────────────────────────
@@ -31,7 +33,7 @@ const MIN_SUPPORTED_VERSION: u32 = 1;
 ///     PresetFile { new_field: default_value(), ..v1.into() }
 /// }
 /// ```
-pub fn migrate_preset(raw: &str, format: OutputFormat) -> Result<PresetFile, CliError> {
+pub fn migrate_preset(raw: &str, format: OutputFormat) -> Result<PresetFile, ExportError> {
     // Quick-parse only the `version` field so we can branch before full deserialization.
     #[derive(Deserialize)]
     struct VersionProbe {
@@ -40,24 +42,24 @@ pub fn migrate_preset(raw: &str, format: OutputFormat) -> Result<PresetFile, Cli
 
     let probe: VersionProbe = match format {
         OutputFormat::Yaml => {
-            serde_saphyr::from_str(raw).map_err(|e| CliError::Deserialize(e.to_string()))?
+            serde_saphyr::from_str(raw).map_err(|e| ExportError::Deserialize(e.to_string()))?
         }
         OutputFormat::Json => {
-            serde_json::from_str(raw).map_err(|e| CliError::Deserialize(e.to_string()))?
+            serde_json::from_str(raw).map_err(|e| ExportError::Deserialize(e.to_string()))?
         }
     };
 
     if probe.version < MIN_SUPPORTED_VERSION {
-        return Err(CliError::Deserialize(format!(
-            "preset file version {} is no longer supported (minimum: {})",
-            probe.version, MIN_SUPPORTED_VERSION
-        )));
+        return Err(ExportError::VersionTooOld {
+            found: probe.version,
+            minimum: MIN_SUPPORTED_VERSION,
+        });
     }
     if probe.version > PRESET_FILE_VERSION {
-        return Err(CliError::Deserialize(format!(
-            "preset file version {} requires a newer nux-cli (this build supports up to v{})",
-            probe.version, PRESET_FILE_VERSION
-        )));
+        return Err(ExportError::VersionTooNew {
+            found: probe.version,
+            supported: PRESET_FILE_VERSION,
+        });
     }
 
     // Version 1 is current — no transformation needed.
@@ -187,25 +189,24 @@ impl PresetFile {
     }
 
     /// Serialize this preset to a UTF-8 string in the requested format.
-    pub fn to_string_fmt(&self, format: OutputFormat) -> Result<String, CliError> {
+    pub fn to_string_fmt(&self, format: OutputFormat) -> Result<String, ExportError> {
         match format {
             OutputFormat::Yaml => {
-                serde_saphyr::to_string(self).map_err(|e| CliError::Serialize(e.to_string()))
+                serde_saphyr::to_string(self).map_err(|e| ExportError::Serialize(e.to_string()))
             }
-            OutputFormat::Json => {
-                serde_json::to_string_pretty(self).map_err(|e| CliError::Serialize(e.to_string()))
-            }
+            OutputFormat::Json => serde_json::to_string_pretty(self)
+                .map_err(|e| ExportError::Serialize(e.to_string())),
         }
     }
 
     /// Deserialize a preset from a UTF-8 string in the given format.
-    pub fn from_str_fmt(content: &str, format: OutputFormat) -> Result<Self, CliError> {
+    pub fn from_str_fmt(content: &str, format: OutputFormat) -> Result<Self, ExportError> {
         match format {
             OutputFormat::Yaml => {
-                serde_saphyr::from_str(content).map_err(|e| CliError::Deserialize(e.to_string()))
+                serde_saphyr::from_str(content).map_err(|e| ExportError::Deserialize(e.to_string()))
             }
             OutputFormat::Json => {
-                serde_json::from_str(content).map_err(|e| CliError::Deserialize(e.to_string()))
+                serde_json::from_str(content).map_err(|e| ExportError::Deserialize(e.to_string()))
             }
         }
     }
@@ -215,21 +216,21 @@ impl PresetFile {
         &self,
         path: &std::path::Path,
         format: OutputFormat,
-    ) -> Result<(), CliError> {
+    ) -> Result<(), ExportError> {
         let content = self.to_string_fmt(format)?;
-        std::fs::write(path, content).map_err(|e| CliError::WriteFile {
-            path: path.display().to_string(),
-            detail: e.to_string(),
+        std::fs::write(path, content).map_err(|source| ExportError::WriteFile {
+            path: path.to_path_buf(),
+            source,
         })
     }
 
     /// Read and deserialize from a file path, inferring format from extension.
     ///
     /// `.json` files are parsed as JSON; everything else is treated as YAML.
-    pub fn read_from_file(path: &std::path::Path) -> Result<Self, CliError> {
-        let content = std::fs::read_to_string(path).map_err(|e| CliError::ReadFile {
-            path: path.display().to_string(),
-            detail: e.to_string(),
+    pub fn read_from_file(path: &std::path::Path) -> Result<Self, ExportError> {
+        let content = std::fs::read_to_string(path).map_err(|source| ExportError::ReadFile {
+            path: path.to_path_buf(),
+            source,
         })?;
         let format = match path.extension().and_then(|e| e.to_str()) {
             Some("json") => OutputFormat::Json,
@@ -381,20 +382,48 @@ mod tests {
     fn test_migrate_preset_rejects_future_version() {
         let raw = "version: 9999\ndevice: MG-30\nslot: 01A\nname: Test\ntempo_ms: 500\nparallel: 0\nactive_scene: 0\neffect_order: []\n";
         let result = migrate_preset(raw, OutputFormat::Yaml);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("newer nux-cli"));
+        assert!(matches!(
+            result,
+            Err(ExportError::VersionTooNew {
+                found: 9999,
+                supported: PRESET_FILE_VERSION
+            })
+        ));
     }
 
     #[test]
     fn test_migrate_preset_rejects_version_zero() {
         let raw = "version: 0\ndevice: MG-30\nslot: 01A\nname: Test\ntempo_ms: 500\nparallel: 0\nactive_scene: 0\neffect_order: []\n";
         let result = migrate_preset(raw, OutputFormat::Yaml);
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("no longer supported")
-        );
+        assert!(matches!(
+            result,
+            Err(ExportError::VersionTooOld {
+                found: 0,
+                minimum: MIN_SUPPORTED_VERSION
+            })
+        ));
+    }
+
+    #[test]
+    fn test_migrate_preset_rejects_garbage() {
+        let result = migrate_preset("{{ not a preset", OutputFormat::Json);
+        assert!(matches!(result, Err(ExportError::Deserialize(_))));
+    }
+
+    #[test]
+    fn test_read_from_missing_file_is_read_error() {
+        let path = std::env::temp_dir().join("nux_test_preset_does_not_exist.yaml");
+        let result = PresetFile::read_from_file(&path);
+        assert!(matches!(result, Err(ExportError::ReadFile { .. })));
+    }
+
+    #[test]
+    fn test_write_to_missing_dir_is_write_error() {
+        let file = PresetFile::from_preset(&sample_preset(), "MG-30");
+        let path = std::env::temp_dir()
+            .join("nux_test_no_such_dir")
+            .join("preset.yaml");
+        let result = file.write_to_file(&path, OutputFormat::Yaml);
+        assert!(matches!(result, Err(ExportError::WriteFile { .. })));
     }
 }
