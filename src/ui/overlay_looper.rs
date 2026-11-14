@@ -21,6 +21,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
+use super::action::{Action, Context};
 use super::app::App;
 
 const WIDTH: u16 = 40;
@@ -41,7 +42,18 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .border_style(Style::default().fg(Color::Cyan))
         .title_bottom(
             Line::from(Span::styled(
-                " r:rec  Space:play  c:clear  ↑↓:vol  ←→:bpm  Esc:close ",
+                app.keymap.hints(&[
+                    (Context::Looper, &[Action::ToggleRecord], "rec"),
+                    (Context::Looper, &[Action::TogglePlay], "play"),
+                    (Context::Looper, &[Action::Clear], "clear"),
+                    (Context::Looper, &[Action::Up, Action::Down], "vol"),
+                    (
+                        Context::Looper,
+                        &[Action::Decrease, Action::Increase],
+                        "bpm",
+                    ),
+                    (Context::Looper, &[Action::Close], "close"),
+                ]),
                 Style::default().fg(Color::DarkGray),
             ))
             .centered(),

@@ -8,6 +8,7 @@ use ratatui::{
     widgets::Tabs,
 };
 
+use super::action::{Action, Context};
 use super::app::App;
 use super::state::{
     ICON_OFFLINE, ICON_ONLINE, OperationStatus, Overlay, SPINNER_FRAMES, Tab, UI_ONLY_BANNER,
@@ -65,7 +66,7 @@ fn render_tab_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let [tabs_area, info_area] =
         Layout::horizontal([Constraint::Length(tab_width), Constraint::Min(0)]).areas(area);
 
-    let tabs = Tabs::new(vec!["[F1] Presets", "[F2] Live Board", "[F3] About"])
+    let tabs = Tabs::new(tab_titles(app))
         .select(app.active_tab as usize)
         .style(Style::default().fg(Color::DarkGray))
         .highlight_style(
@@ -112,21 +113,7 @@ fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
             left_area,
         );
     } else {
-        let hints = if app.active_overlay.is_some() {
-            " Esc:cancel"
-        } else {
-            match app.active_tab {
-                Tab::Presets => {
-                    if app.chain_panel_active {
-                        " ←/→:slot  Tab:scene  Esc:back  q:quit"
-                    } else {
-                        " j/k:move  Enter:chain  g:get  s:send  d:device  l:looper  D:drums  q:quit"
-                    }
-                }
-                Tab::LiveBoard => " ←/→:slot  Tab:scene  d:device  l:looper  D:drums  q:quit",
-                Tab::About => " q:quit",
-            }
-        };
+        let hints = key_hints(app);
         frame.render_widget(
             Line::from(Span::styled(hints, Style::default().fg(Color::DarkGray))),
             left_area,
@@ -150,6 +137,58 @@ fn render_status_bar(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
 /// Whether the active overlay is UI-only (its actions are not sent to the device).
 fn ui_only_overlay(app: &App) -> bool {
     matches!(app.active_overlay, Some(Overlay::Looper | Overlay::Drum))
+}
+
+/// Tab titles with the (configurable) key that selects each tab.
+fn tab_titles(app: &App) -> Vec<String> {
+    [
+        (Action::TabPresets, "Presets"),
+        (Action::TabLiveBoard, "Live Board"),
+        (Action::TabAbout, "About"),
+    ]
+    .iter()
+    .map(|(action, title)| format!("[{}] {title}", app.keymap.primary(Context::Global, *action)))
+    .collect()
+}
+
+/// Key-hint text for the left side of the status bar, built from the active bindings.
+fn key_hints(app: &App) -> String {
+    use Action::{
+        ChangeDevice, Close, Confirm, Down, GetPreset, Left, NextScene, OpenDrum, OpenLooper, Quit,
+        Right, SendPreset, Up,
+    };
+    let keymap = &app.keymap;
+    if let Some(overlay) = app.active_overlay {
+        return keymap.hints(&[(Context::of_overlay(overlay), &[Close], "cancel")]);
+    }
+    let quit = (Context::Global, &[Quit][..], "quit");
+    match app.active_tab {
+        Tab::Presets if app.chain_panel_active => keymap.hints(&[
+            (Context::Presets, &[Left, Right], "slot"),
+            (Context::Presets, &[NextScene], "scene"),
+            (Context::Presets, &[Close], "back"),
+            quit,
+        ]),
+        Tab::Presets => keymap.hints(&[
+            (Context::Presets, &[Down, Up], "move"),
+            (Context::Presets, &[Confirm], "chain"),
+            (Context::Presets, &[GetPreset], "get"),
+            (Context::Presets, &[SendPreset], "send"),
+            (Context::Global, &[ChangeDevice], "device"),
+            (Context::Global, &[OpenLooper], "looper"),
+            (Context::Global, &[OpenDrum], "drums"),
+            quit,
+        ]),
+        Tab::LiveBoard => keymap.hints(&[
+            (Context::LiveBoard, &[Left, Right], "slot"),
+            (Context::LiveBoard, &[NextScene], "scene"),
+            (Context::Global, &[ChangeDevice], "device"),
+            (Context::Global, &[OpenLooper], "looper"),
+            (Context::Global, &[OpenDrum], "drums"),
+            quit,
+        ]),
+        Tab::About => keymap.hints(&[quit]),
+    }
 }
 
 #[cfg(test)]
@@ -193,6 +232,18 @@ mod tests {
                 "{overlay:?}: status row missing banner: {row:?}"
             );
         }
+    }
+
+    #[test]
+    fn hints_and_tab_titles_follow_the_keymap() {
+        let mut app = App::new();
+        app.keymap = crate::ui::keymap::KeyMap::from_yaml(
+            "global:\n  quit: [\"x\"]\n  tab_about: [\"<F9>\"]\n",
+        );
+        assert!(key_hints(&app).contains("x:quit"), "{}", key_hints(&app));
+        assert_eq!(tab_titles(&app)[2], "[F9] About");
+        app.active_overlay = Some(Overlay::Help);
+        assert_eq!(key_hints(&app), " Esc:cancel");
     }
 
     #[test]

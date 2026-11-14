@@ -1,6 +1,7 @@
-//! Help overlay — key bindings reference.
+//! Help overlay — key bindings reference, generated from the active key map
+//! so it reflects `keybindings.yaml`.
 //!
-//! Opened with `?`. Closed with `Esc`.
+//! Opened with the `help` action (`?` by default). Closed with its `close` action.
 
 use ratatui::{
     Frame,
@@ -10,15 +11,114 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
+use super::action::{Action, Context};
 use super::app::App;
 
 const WIDTH: u16 = 54;
-const HEIGHT: u16 = 24;
+/// Width of the key column, in characters.
+const KEY_COLUMN: usize = 16;
 
-pub fn render(frame: &mut Frame, area: Rect, _app: &App) {
-    let popup = centered_rect(WIDTH, HEIGHT, area);
+/// One help line: the actions whose keys are shown together, and what they do.
+type Entry = (Context, &'static [Action], &'static str);
+
+const SECTIONS: &[(&str, &[Entry])] = &[
+    (
+        "Global",
+        &[
+            (
+                Context::Global,
+                &[Action::TabPresets, Action::TabLiveBoard, Action::TabAbout],
+                "Switch tabs (Presets / Live Board / About)",
+            ),
+            (
+                Context::Global,
+                &[Action::ChangeDevice],
+                "Open device picker",
+            ),
+            (
+                Context::Global,
+                &[Action::OpenLooper],
+                "Open looper overlay",
+            ),
+            (
+                Context::Global,
+                &[Action::OpenDrum],
+                "Open drum machine overlay",
+            ),
+            (Context::Global, &[Action::Quit], "Quit"),
+            (Context::Global, &[Action::Help], "This help"),
+        ],
+    ),
+    (
+        "Presets tab",
+        &[
+            (
+                Context::Presets,
+                &[Action::Up, Action::Down],
+                "Move preset selection",
+            ),
+            (
+                Context::Presets,
+                &[Action::Left, Action::Right],
+                "Move chain slot focus",
+            ),
+            (
+                Context::Presets,
+                &[Action::Confirm, Action::Close],
+                "Focus / leave chain panel",
+            ),
+            (
+                Context::Presets,
+                &[Action::NextScene],
+                "Cycle scene (A → B → C → A)",
+            ),
+            (
+                Context::Presets,
+                &[Action::GetPreset],
+                "Pull current preset from device",
+            ),
+            (
+                Context::Presets,
+                &[Action::SendPreset],
+                "Send selected preset to device",
+            ),
+        ],
+    ),
+    (
+        "Live Board tab",
+        &[
+            (
+                Context::LiveBoard,
+                &[Action::Left, Action::Right],
+                "Move chain slot focus",
+            ),
+            (
+                Context::LiveBoard,
+                &[Action::NextScene],
+                "Cycle scene (A → B → C → A)",
+            ),
+        ],
+    ),
+    (
+        "Overlays",
+        &[
+            (Context::Help, &[Action::Close], "Close overlay"),
+            (
+                Context::Conflict,
+                &[Action::Override, Action::Discard, Action::Rename],
+                "Conflict: Override / No / Rename",
+            ),
+        ],
+    ),
+];
+
+pub fn render(frame: &mut Frame, area: Rect, app: &App) {
+    let lines = help_lines(app);
+    let height = lines.len() as u16 + 2;
+    let popup = centered_rect(WIDTH, height, area);
     frame.render_widget(Clear, popup);
 
+    let close_key = app.keymap.primary(Context::Help, Action::Close);
     let block = Block::default()
         .borders(Borders::ALL)
         .title(Span::styled(
@@ -30,94 +130,46 @@ pub fn render(frame: &mut Frame, area: Rect, _app: &App) {
         .border_style(Style::default().fg(Color::Yellow))
         .title_bottom(
             Line::from(Span::styled(
-                " Esc:close ",
+                format!(" {close_key}:close "),
                 Style::default().fg(Color::DarkGray),
             ))
             .centered(),
         );
 
-    let key = Style::default()
-        .fg(Color::Cyan)
-        .add_modifier(Modifier::BOLD);
-    let hdr = Style::default()
-        .fg(Color::Yellow)
-        .add_modifier(Modifier::UNDERLINED);
-    let dim = Style::default().fg(Color::White);
-    let gap = Line::from("");
-
-    let lines = vec![
-        Line::from(Span::styled("Global", hdr)),
-        Line::from(vec![
-            Span::styled("  F1/F2/F3   ", key),
-            Span::styled("Switch tabs (Presets / Live Board / About)", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  d          ", key),
-            Span::styled("Open device picker", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  l          ", key),
-            Span::styled("Open looper overlay", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  D          ", key),
-            Span::styled("Open drum machine overlay", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  q          ", key),
-            Span::styled("Quit", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  ?          ", key),
-            Span::styled("This help", dim),
-        ]),
-        gap.clone(),
-        Line::from(Span::styled("Presets tab", hdr)),
-        Line::from(vec![
-            Span::styled("  j/k  ↑/↓  ", key),
-            Span::styled("Move preset selection", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  Enter      ", key),
-            Span::styled("Toggle chain panel focus", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  Tab        ", key),
-            Span::styled("Cycle scene (A → B → C → A)", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  g          ", key),
-            Span::styled("Pull current preset from device", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  s          ", key),
-            Span::styled("Send selected preset to device", dim),
-        ]),
-        gap.clone(),
-        Line::from(Span::styled("Live Board tab", hdr)),
-        Line::from(vec![
-            Span::styled("  h/l  ←/→  ", key),
-            Span::styled("Move chain slot focus", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  Tab        ", key),
-            Span::styled("Cycle scene (A → B → C → A)", dim),
-        ]),
-        gap.clone(),
-        Line::from(Span::styled("Overlays", hdr)),
-        Line::from(vec![
-            Span::styled("  Esc        ", key),
-            Span::styled("Close overlay", dim),
-        ]),
-        Line::from(vec![
-            Span::styled("  o / n / r  ", key),
-            Span::styled("Conflict: Override / No / Rename", dim),
-        ]),
-    ];
-
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Help text as lines: section headers followed by `keys  description`.
+fn help_lines(app: &App) -> Vec<Line<'static>> {
+    let key_style = Style::default()
+        .fg(Color::Cyan)
+        .add_modifier(Modifier::BOLD);
+    let header_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::UNDERLINED);
+    let text_style = Style::default().fg(Color::White);
+
+    let mut lines = Vec::new();
+    for (index, (title, entries)) in SECTIONS.iter().enumerate() {
+        if index > 0 {
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(Span::styled(*title, header_style)));
+        for (context, actions, description) in *entries {
+            let keys = actions
+                .iter()
+                .map(|action| app.keymap.label(*context, *action))
+                .collect::<Vec<_>>()
+                .join(" ");
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {keys:<KEY_COLUMN$} "), key_style),
+                Span::styled(*description, text_style),
+            ]));
+        }
+    }
+    lines
 }
 
 fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
@@ -128,5 +180,48 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
         y,
         width: width.min(area.width),
         height: height.min(area.height),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::keymap::KeyMap;
+
+    fn text(lines: &[Line<'_>]) -> String {
+        lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn help_shows_default_keys() {
+        let mut app = App::new();
+        app.keymap = KeyMap::default();
+        let help = text(&help_lines(&app));
+        assert!(help.contains("Quit"));
+        assert!(help.contains("k/↑ j/↓"), "{help}");
+        assert!(help.contains("F1 F2 F3"), "{help}");
+    }
+
+    #[test]
+    fn help_follows_custom_bindings() {
+        let mut app = App::new();
+        app.keymap = KeyMap::from_yaml("global:\n  quit: [\"x\"]\n  help: []\n");
+        let help = text(&help_lines(&app));
+        let quit_line = help.lines().find(|line| line.ends_with("Quit")).unwrap();
+        assert!(quit_line.trim_start().starts_with('x'), "{quit_line}");
+        let help_line = help
+            .lines()
+            .find(|line| line.ends_with("This help"))
+            .unwrap();
+        assert!(help_line.trim_start().starts_with('-'), "{help_line}");
     }
 }

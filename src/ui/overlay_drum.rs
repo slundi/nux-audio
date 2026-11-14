@@ -22,6 +22,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
+use super::action::{Action, Context};
 use super::app::App;
 use super::state::DRUM_PATTERNS;
 
@@ -55,7 +56,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .border_style(Style::default().fg(Color::Magenta))
         .title_bottom(
             Line::from(Span::styled(
-                " j/k:pattern  ←→:bpm  Space:play  Esc:close ",
+                app.keymap.hints(&[
+                    (Context::Drum, &[Action::Down, Action::Up], "pattern"),
+                    (Context::Drum, &[Action::Decrease, Action::Increase], "bpm"),
+                    (Context::Drum, &[Action::TogglePlay], "play"),
+                    (Context::Drum, &[Action::Close], "close"),
+                ]),
                 Style::default().fg(Color::DarkGray),
             ))
             .centered(),

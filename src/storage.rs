@@ -1,6 +1,7 @@
 //! Local preset library and application configuration persistence.
 //!
-//! Two XDG-compliant files are managed:
+//! Two XDG-compliant files are managed (plus the read-only, user-edited
+//! `~/.config/nux-audio/keybindings.yaml`, see [`Storage::load_keybindings`]):
 //! - Config:         `~/.config/nux-audio/config.yaml`
 //! - Preset library: `~/.local/share/nux-audio/presets/<device-slug>.yaml`
 //!   One file per device model (e.g. `mg-30.yaml`).
@@ -163,6 +164,22 @@ impl Storage {
             .ok()
             .and_then(|s| serde_saphyr::from_str(&s).ok())
             .unwrap_or_default()
+    }
+
+    /// Raw content of `~/.config/nux-audio/keybindings.yaml`, `None` if the
+    /// file is absent or unreadable (the TUI then uses its default bindings).
+    ///
+    /// Kept separate from [`Config`] so that `save_config` never rewrites the
+    /// user's hand-edited bindings (and their comments).
+    pub fn load_keybindings(&self) -> Option<String> {
+        let path = self.xdg.find_config_file("keybindings.yaml")?;
+        match std::fs::read_to_string(&path) {
+            Ok(content) => Some(content),
+            Err(error) => {
+                tracing::warn!("cannot read {}: {error}", path.display());
+                None
+            }
+        }
     }
 
     /// Persist `config` to `~/.config/nux-audio/config.yaml`.

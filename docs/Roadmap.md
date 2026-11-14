@@ -129,6 +129,7 @@ Commands like `nux set amp-gain 50` or `nux dump-preset > my_tone.yaml`
   - [ ] Looper / drum overlays still local-only (status bar shows a "UI only — not sent to device" banner while they are open).
   - [ ] Live device updates (knob turns / preset changes pushed by the pedal) — `MidiConnection::subscribe` exists, not yet surfaced as events.
 * [x] 6.8 **Mouse support**: tab-bar clicks, preset-list row click + scroll, chain-panel slot click, live-board slot/scene click, device picker click + scroll, drum pattern click + scroll, conflict popup O/N/R click zones.
+* [x] 6.9 **Configurable key bindings**: every TUI key goes through `ui::keymap::KeyMap` (`(Context, Key) → Action`), loaded from `~/.config/nux-audio/keybindings.yaml` (separate from `config.yaml` so `save_config` never rewrites it). Contexts: `global`, `presets`, `live_board`, `help`, `device_picker`, `looper`, `drum`, `conflict`. Only the actions listed in the file are overridden; several keys per action; `[]` unbinds. Conflicts and bad entries are logged and reported in the status bar, the entry falls back to its default. `Ctrl+C` always quits. Help overlay, tab titles and hint bars are generated from the active bindings. `keybindings.example.yaml` documents the defaults (a test keeps it in sync). The About tab table is still static.
 
 ## Phase 7: Community & Extensibility
 

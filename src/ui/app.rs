@@ -1,6 +1,7 @@
 //! Application state struct, key-event handlers, and event loop.
 //!
 //! Types are defined in [`super::state`].
+//! Key handlers live in [`super::key_handlers`], bindings in [`super::keymap`].
 //! Mouse handlers live in [`super::mouse`].
 //! Render functions live in [`super::render`].
 //! Device actions and session events live in [`super::session_link`].
@@ -12,7 +13,7 @@ use std::time::{Duration, Instant};
 const STATUS_MESSAGE_LIFETIME: Duration = Duration::from_secs(3);
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -23,10 +24,11 @@ use crate::session::worker::{SessionCommand, SessionEvent, spawn_worker};
 use crate::storage::{Config, PresetLibrary, Storage};
 
 use super::action::GlobalAction;
+use super::keymap::KeyMap;
 use super::render::render;
 use super::state::{
-    ConflictState, DRUM_PATTERNS, DeviceInfo, DevicePickerState, DrumState, LooperState,
-    OperationStatus, Overlay, Tab,
+    ConflictState, DeviceInfo, DevicePickerState, DrumState, LooperState, OperationStatus, Overlay,
+    Tab,
 };
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -65,6 +67,8 @@ pub struct App {
     pub status_message: Option<(String, Instant)>,
     #[allow(dead_code)] // used in future phases for preferences/save
     pub config: Config,
+    /// Key bindings: defaults merged with `keybindings.yaml`.
+    pub keymap: KeyMap,
     /// `pub(crate)` so that the mouse handler module can call `save_library`.
     pub(crate) storage: Storage,
     /// Command channel to the session worker; `None` when no worker runs (tests).
@@ -80,7 +84,13 @@ impl App {
             Some(dev) => storage.load_library(dev),
             None => PresetLibrary::new("—"),
         };
-        Self {
+        let keymap = storage
+            .load_keybindings()
+            .map_or_else(KeyMap::default, |yaml| KeyMap::from_yaml(&yaml));
+        for warning in &keymap.warnings {
+            tracing::warn!("keybindings.yaml: {warning}");
+        }
+        let mut app = Self {
             should_quit: false,
             active_tab: Tab::default(),
             active_overlay: None,
@@ -98,9 +108,18 @@ impl App {
             tick: 0,
             status_message: None,
             config,
+            keymap,
             storage,
             session_tx: None,
+        };
+        if let Some(first) = app.keymap.warnings.first() {
+            let message = format!(
+                "keybindings.yaml: {first} ({} issue(s), see log)",
+                app.keymap.warnings.len()
+            );
+            app.set_status(&message);
         }
+        app
     }
 
     pub fn scene_label(&self) -> &'static str {
@@ -140,257 +159,6 @@ impl App {
             GlobalAction::Help => self.open_overlay(Overlay::Help),
             GlobalAction::GetPreset => self.action_get_from_device(),
             GlobalAction::SendPreset => self.action_send_to_device(),
-        }
-    }
-
-    // ── Key handling ──────────────────────────────────────────────────────────
-
-    pub fn handle_key(&mut self, key: event::KeyEvent) {
-        // Overlay absorbs all keys when active.
-        if let Some(overlay) = self.active_overlay {
-            self.handle_overlay_key(overlay, key);
-            return;
-        }
-
-        // Global bindings (no modifiers).
-        if key.modifiers == KeyModifiers::NONE {
-            match key.code {
-                KeyCode::Char('q') => {
-                    self.handle_action(GlobalAction::Quit);
-                    return;
-                }
-                KeyCode::Char('?') => {
-                    self.handle_action(GlobalAction::Help);
-                    return;
-                }
-                KeyCode::F(1) => {
-                    self.active_tab = Tab::Presets;
-                    return;
-                }
-                KeyCode::F(2) => {
-                    self.active_tab = Tab::LiveBoard;
-                    return;
-                }
-                KeyCode::F(3) => {
-                    self.active_tab = Tab::About;
-                    return;
-                }
-                KeyCode::Char('d') => {
-                    self.handle_action(GlobalAction::ChangeDevice);
-                    return;
-                }
-                KeyCode::Char('l') => {
-                    self.open_overlay(Overlay::Looper);
-                    return;
-                }
-                _ => {}
-            }
-            // 'D' is Shift+d — check separately.
-        }
-        if key.modifiers == KeyModifiers::SHIFT && key.code == KeyCode::Char('D') {
-            self.open_overlay(Overlay::Drum);
-            return;
-        }
-
-        match self.active_tab {
-            Tab::Presets => self.handle_presets_key(key),
-            Tab::LiveBoard => self.handle_liveboard_key(key),
-            Tab::About => {}
-        }
-    }
-
-    fn handle_overlay_key(&mut self, overlay: Overlay, key: event::KeyEvent) {
-        // Esc always closes.
-        if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Esc {
-            self.active_overlay = None;
-            return;
-        }
-        match overlay {
-            Overlay::DevicePicker => self.handle_device_picker_key(key),
-            Overlay::Looper => self.handle_looper_key(key),
-            Overlay::Drum => self.handle_drum_key(key),
-            Overlay::Conflict => self.handle_conflict_key(key),
-            Overlay::Help => {} // Esc (above) is the only key needed
-        }
-    }
-
-    fn handle_device_picker_key(&mut self, key: event::KeyEvent) {
-        if key.modifiers != KeyModifiers::NONE {
-            return;
-        }
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.device_picker.selected = self.device_picker.selected.saturating_sub(1);
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                let max = self.device_picker.devices.len().saturating_sub(1);
-                self.device_picker.selected = (self.device_picker.selected + 1).min(max);
-            }
-            KeyCode::Enter => {
-                if let Some(model) = self
-                    .device_picker
-                    .devices
-                    .get(self.device_picker.selected)
-                    .cloned()
-                {
-                    self.active_overlay = None;
-                    self.connect_to(model);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_looper_key(&mut self, key: event::KeyEvent) {
-        if key.modifiers != KeyModifiers::NONE {
-            return;
-        }
-        match key.code {
-            KeyCode::Char('r') => {
-                self.looper.is_recording = !self.looper.is_recording;
-                if self.looper.is_recording {
-                    self.looper.is_playing = false;
-                }
-            }
-            KeyCode::Char(' ') => {
-                self.looper.is_playing = !self.looper.is_playing;
-                if self.looper.is_playing {
-                    self.looper.is_recording = false;
-                }
-            }
-            KeyCode::Char('c') => {
-                self.looper.is_playing = false;
-                self.looper.is_recording = false;
-            }
-            KeyCode::Right | KeyCode::Char('+') => {
-                self.looper.bpm = (self.looper.bpm + 1).min(240);
-            }
-            KeyCode::Left | KeyCode::Char('-') => {
-                self.looper.bpm = self.looper.bpm.saturating_sub(1).max(20);
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.looper.volume = (self.looper.volume + 1).min(127);
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.looper.volume = self.looper.volume.saturating_sub(1);
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_drum_key(&mut self, key: event::KeyEvent) {
-        if key.modifiers != KeyModifiers::NONE {
-            return;
-        }
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.drum.pattern_index = self.drum.pattern_index.saturating_sub(1);
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.drum.pattern_index =
-                    (self.drum.pattern_index + 1).min(DRUM_PATTERNS.len() - 1);
-            }
-            KeyCode::Right | KeyCode::Char('+') => {
-                self.drum.bpm = (self.drum.bpm + 1).min(240);
-            }
-            KeyCode::Left | KeyCode::Char('-') => {
-                self.drum.bpm = self.drum.bpm.saturating_sub(1).max(20);
-            }
-            KeyCode::Char(' ') => {
-                self.drum.is_playing = !self.drum.is_playing;
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_presets_key(&mut self, key: event::KeyEvent) {
-        if key.modifiers != KeyModifiers::NONE {
-            return;
-        }
-        match key.code {
-            KeyCode::Esc => {
-                self.chain_panel_active = false;
-            }
-            KeyCode::Enter => {
-                self.chain_panel_active = !self.chain_panel_active;
-            }
-            KeyCode::Tab => {
-                self.active_scene = (self.active_scene + 1) % 3;
-            }
-            KeyCode::Char('g') if !self.chain_panel_active => {
-                self.handle_action(GlobalAction::GetPreset);
-            }
-            KeyCode::Char('s') if !self.chain_panel_active => {
-                self.handle_action(GlobalAction::SendPreset);
-            }
-            KeyCode::Up | KeyCode::Char('k') if !self.chain_panel_active => {
-                self.preset_selected = self.preset_selected.saturating_sub(1);
-            }
-            KeyCode::Down | KeyCode::Char('j') if !self.chain_panel_active => {
-                let max = self.preset_count().saturating_sub(1);
-                self.preset_selected = (self.preset_selected + 1).min(max);
-            }
-            KeyCode::Left | KeyCode::Char('h') if self.chain_panel_active => {
-                self.chain_slot_focus = self.chain_slot_focus.saturating_sub(1);
-            }
-            KeyCode::Right | KeyCode::Char('l') if self.chain_panel_active => {
-                self.chain_slot_focus = (self.chain_slot_focus + 1).min(10);
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_liveboard_key(&mut self, key: event::KeyEvent) {
-        if key.modifiers != KeyModifiers::NONE {
-            return;
-        }
-        match key.code {
-            KeyCode::Tab => {
-                self.active_scene = (self.active_scene + 1) % 3;
-            }
-            KeyCode::Left | KeyCode::Char('h') => {
-                self.chain_slot_focus = self.chain_slot_focus.saturating_sub(1);
-            }
-            KeyCode::Right | KeyCode::Char('l') => {
-                self.chain_slot_focus = (self.chain_slot_focus + 1).min(10);
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_conflict_key(&mut self, key: event::KeyEvent) {
-        if key.modifiers != KeyModifiers::NONE {
-            return;
-        }
-        match key.code {
-            // Override: replace the existing entry with the incoming one.
-            KeyCode::Char('o') | KeyCode::Char('O') => {
-                if let Some(conflict) = self.conflict.take() {
-                    self.library.presets[conflict.existing_idx] = conflict.incoming;
-                    let _ = self.storage.save_library(&self.library);
-                    self.set_status("Preset overridden");
-                }
-                self.active_overlay = None;
-            }
-            // No: discard the incoming preset, keep the existing one.
-            KeyCode::Char('n') | KeyCode::Char('N') => {
-                self.conflict = None;
-                self.active_overlay = None;
-                self.set_status("Pull cancelled");
-            }
-            // Rename: save the incoming as a new local-only entry with a timestamp suffix.
-            KeyCode::Char('r') | KeyCode::Char('R') => {
-                if let Some(mut conflict) = self.conflict.take() {
-                    let ts = conflict.incoming.modified.format("%Y%m%d-%H%M%S");
-                    conflict.incoming.name = format!("{} ({})", conflict.incoming.name, ts);
-                    conflict.incoming.slot = None; // local copy — not tied to a slot
-                    self.library.presets.push(conflict.incoming);
-                    let _ = self.storage.save_library(&self.library);
-                    self.set_status("Preset saved with timestamp");
-                }
-                self.active_overlay = None;
-            }
-            _ => {}
         }
     }
 
@@ -537,6 +305,7 @@ mod tests {
     #[test]
     fn test_handle_key_q_quits() {
         let mut app = App::new();
+        app.keymap = KeyMap::default();
         app.handle_key(make_key(KeyCode::Char('q')));
         assert!(app.should_quit);
     }
@@ -544,6 +313,7 @@ mod tests {
     #[test]
     fn test_handle_key_question_mark_opens_help() {
         let mut app = App::new();
+        app.keymap = KeyMap::default();
         app.handle_key(make_key(KeyCode::Char('?')));
         assert_eq!(app.active_overlay, Some(Overlay::Help));
     }
@@ -551,6 +321,7 @@ mod tests {
     #[test]
     fn test_handle_key_esc_closes_help_overlay() {
         let mut app = App::new();
+        app.keymap = KeyMap::default();
         app.active_overlay = Some(Overlay::Help);
         app.handle_key(make_key(KeyCode::Esc));
         assert!(app.active_overlay.is_none());
@@ -559,6 +330,7 @@ mod tests {
     #[test]
     fn test_handle_key_f1_switches_tab() {
         let mut app = App::new();
+        app.keymap = KeyMap::default();
         app.active_tab = Tab::About;
         app.handle_key(make_key(KeyCode::F(1)));
         assert_eq!(app.active_tab, Tab::Presets);
@@ -567,6 +339,7 @@ mod tests {
     #[test]
     fn test_handle_key_f2_switches_tab() {
         let mut app = App::new();
+        app.keymap = KeyMap::default();
         app.handle_key(make_key(KeyCode::F(2)));
         assert_eq!(app.active_tab, Tab::LiveBoard);
     }

@@ -22,6 +22,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
+use super::action::{Action, Context};
 use super::app::App;
 
 const WIDTH: u16 = 44;
@@ -42,7 +43,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .border_style(Style::default().fg(Color::Yellow))
         .title_bottom(
             Line::from(Span::styled(
-                " Enter:connect  Esc:cancel ",
+                app.keymap.hints(&[
+                    (Context::DevicePicker, &[Action::Confirm], "connect"),
+                    (Context::DevicePicker, &[Action::Close], "cancel"),
+                ]),
                 Style::default().fg(Color::DarkGray),
             ))
             .centered(),

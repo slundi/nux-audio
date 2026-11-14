@@ -186,6 +186,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&dir);
             let (command_tx, commands) = unbounded_channel();
             let mut app = App::new();
+            app.keymap = crate::ui::keymap::KeyMap::default();
             app.storage.apply_config(&Config {
                 presets_dir: Some(dir.clone()),
                 ..Config::default()

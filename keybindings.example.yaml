@@ -1,0 +1,82 @@
+# nux-audio TUI key bindings — the default configuration.
+#
+# Copy this file to ~/.config/nux-audio/keybindings.yaml and edit it.
+# You only need to keep the actions you want to change: every action you leave
+# out keeps its default. An empty list (`quit: []`) unbinds the action.
+#
+# Syntax of a key (always quote it):
+#   "q"  "?"  "D"        a character ("D" means Shift+d)
+#   "<CR>" "<Esc>" "<Tab>" "<Space>" "<BS>" "<Del>" "<Insert>"
+#   "<Up>" "<Down>" "<Left>" "<Right>" "<Home>" "<End>" "<PageUp>" "<PageDown>"
+#   "<F1>" … "<F12>"
+#   "<C-x>" Ctrl+x, "<A-x>" Alt+x, "<S-Tab>" Shift+Tab, "<C-A-x>" combined
+#
+# Rules:
+#   * Several keys can trigger one action; one key triggers one action per context.
+#   * A binding you write wins over a default one holding the same key.
+#   * Presets / live_board keys that are already bound in `global` never
+#     reach those tabs (global is checked first) and are ignored.
+#   * Ctrl+C always quits, whatever the configuration.
+#   * Mistakes (unknown name, bad key, conflict) are logged and reported in the
+#     status bar at startup; the faulty entry falls back to its default.
+
+# Active when no overlay is open, on every tab.
+global:
+  quit: ["q"]
+  help: ["?"]
+  change_device: ["d"]
+  tab_presets: ["<F1>"]
+  tab_live_board: ["<F2>"]
+  tab_about: ["<F3>"]
+  open_looper: ["l"]
+  open_drum: ["D"]
+
+presets:
+  up: ["k", "<Up>"]            # previous preset
+  down: ["j", "<Down>"]        # next preset
+  left: ["h", "<Left>"]        # previous chain slot (chain panel focused)
+  right: ["<Right>"]           # next chain slot (chain panel focused)
+  confirm: ["<CR>"]            # focus / unfocus the chain panel
+  close: ["<Esc>"]             # leave the chain panel
+  next_scene: ["<Tab>"]        # scene A → B → C
+  get_preset: ["g"]            # pull the current preset from the device
+  send_preset: ["s"]           # send the selected preset to the device
+
+live_board:
+  left: ["h", "<Left>"]
+  right: ["<Right>"]
+  next_scene: ["<Tab>"]
+
+help:
+  close: ["<Esc>"]
+
+device_picker:
+  up: ["k", "<Up>"]
+  down: ["j", "<Down>"]
+  confirm: ["<CR>"]
+  close: ["<Esc>"]
+
+looper:
+  toggle_record: ["r"]
+  toggle_play: ["<Space>"]
+  clear: ["c"]
+  increase: ["<Right>", "+"]   # BPM up
+  decrease: ["<Left>", "-"]    # BPM down
+  up: ["<Up>", "k"]            # volume up
+  down: ["<Down>", "j"]        # volume down
+  close: ["<Esc>"]
+
+drum:
+  up: ["k", "<Up>"]            # previous pattern
+  down: ["j", "<Down>"]        # next pattern
+  increase: ["<Right>", "+"]   # BPM up
+  decrease: ["<Left>", "-"]    # BPM down
+  toggle_play: ["<Space>"]
+  close: ["<Esc>"]
+
+# Preset pull conflict dialog.
+conflict:
+  override: ["o", "O"]         # replace the existing preset
+  discard: ["n", "N"]          # keep the existing preset
+  rename: ["r", "R"]           # keep both, timestamp the incoming one
+  close: ["<Esc>"]

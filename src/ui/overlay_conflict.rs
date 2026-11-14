@@ -25,6 +25,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
+use super::action::{Action, Context};
 use super::app::App;
 
 const WIDTH: u16 = 52;
@@ -47,7 +48,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .border_style(Style::default().fg(Color::Red))
         .title_bottom(
             Line::from(Span::styled(
-                " [O]verride  [N]o  [R]ename+timestamp  Esc:cancel ",
+                app.keymap.hints(&[
+                    (Context::Conflict, &[Action::Override], "override"),
+                    (Context::Conflict, &[Action::Discard], "no"),
+                    (Context::Conflict, &[Action::Rename], "rename+timestamp"),
+                    (Context::Conflict, &[Action::Close], "cancel"),
+                ]),
                 Style::default().fg(Color::DarkGray),
             ))
             .centered(),
